@@ -1,0 +1,219 @@
+/* Pattern Tabs */
+.pattern-tabs-container {
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pattern-tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+  min-width: max-content;
+}
+
+.pattern-tab {
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.pattern-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.pattern-tab.active {
+  background: var(--accent-green-bg);
+  color: var(--accent-green);
+  border-color: rgba(0,184,148,0.3);
+}
+
+.tab-add {
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.45rem 0.8rem;
+  color: var(--text-muted);
+}
+
+.tab-add:hover {
+  color: var(--accent-green);
+  background: var(--accent-green-bg);
+}
+
+/* Filters */
+.filters-bar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.filters-bar select {
+  min-width: 160px;
+}
+
+/* Problem Table */
+.problem-table {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.problem-header-row {
+  display: grid;
+  grid-template-columns: 60px 60px 1fr 100px 130px;
+  padding: 0.7rem 1rem;
+  background: var(--bg-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.problem-row {
+  display: grid;
+  grid-template-columns: 60px 60px 1fr 100px 130px;
+  padding: 0.65rem 1rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.875rem;
+  transition: background var(--transition-fast);
+  animation: fadeIn 0.3s ease-out both;
+}
+
+.problem-row:last-child {
+  border-bottom: none;
+}
+
+.problem-row:hover {
+  background: var(--bg-hover);
+}
+
+.problem-row.solved {
+  background: rgba(0,184,148,0.04);
+}
+
+.problem-row.solved .problem-link {
+  color: var(--text-secondary);
+}
+
+.col-num {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.problem-link {
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: color var(--transition-fast);
+}
+
+.problem-link:hover {
+  color: var(--accent-cyan);
+}
+
+/* Checkmark Button */
+.check-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 2px solid var(--border-color);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: transparent;
+  transition: all var(--transition-fast);
+}
+
+.check-btn:hover {
+  border-color: var(--accent-green);
+  background: var(--accent-green-bg);
+}
+
+.check-btn.checked {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0,184,148,0.3);
+}
+
+/* Lookup */
+.lookup-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lookup-row input {
+  flex: 1;
+}
+
+/* Preview */
+.preview-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+.preview-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-secondary);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .problem-header-row,
+  .problem-row {
+    grid-template-columns: 40px 45px 1fr 75px;
+  }
+  
+  .col-pattern {
+    display: none;
+  }
+  
+  .filters-bar {
+    flex-direction: column;
+  }
+  
+  .filters-bar select {
+    width: 100%;
+    min-width: unset;
+  }
+}

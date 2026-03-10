@@ -1,0 +1,69 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS patterns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  is_default INTEGER DEFAULT 0,
+  created_by INTEGER,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS problems (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  leetcode_number INTEGER UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  difficulty TEXT NOT NULL,
+  url TEXT NOT NULL,
+  pattern_id INTEGER,
+  added_by INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (pattern_id) REFERENCES patterns(id),
+  FOREIGN KEY (added_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS user_progress (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  problem_id INTEGER NOT NULL,
+  solved INTEGER DEFAULT 0,
+  solved_at DATETIME,
+  UNIQUE(user_id, problem_id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (problem_id) REFERENCES problems(id)
+);
+
+CREATE TABLE IF NOT EXISTS groups_ (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_by INTEGER NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(group_id, user_id),
+  FOREIGN KEY (group_id) REFERENCES groups_(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS group_problems (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id INTEGER NOT NULL,
+  problem_id INTEGER NOT NULL,
+  added_by INTEGER,
+  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(group_id, problem_id),
+  FOREIGN KEY (group_id) REFERENCES groups_(id),
+  FOREIGN KEY (problem_id) REFERENCES problems(id),
+  FOREIGN KEY (added_by) REFERENCES users(id)
+);

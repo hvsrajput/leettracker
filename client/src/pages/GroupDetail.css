@@ -1,0 +1,118 @@
+/* Members Bar */
+.members-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.member-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem 0.3rem 0.3rem;
+  font-size: 0.8rem;
+}
+
+.member-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Group Actions */
+.group-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+/* Group Table */
+.group-table {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+}
+
+.group-header-row {
+  display: flex;
+  padding: 0.7rem 1rem;
+  background: var(--bg-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-light);
+  min-width: fit-content;
+}
+
+.group-problem-row {
+  display: flex;
+  padding: 0.65rem 1rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.875rem;
+  transition: background var(--transition-fast);
+  animation: fadeIn 0.3s ease-out both;
+  min-width: fit-content;
+}
+
+.group-problem-row:last-child {
+  border-bottom: none;
+}
+
+.group-problem-row:hover {
+  background: var(--bg-hover);
+}
+
+.gcol-num {
+  width: 60px;
+  flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.gcol-title {
+  flex: 1;
+  min-width: 200px;
+}
+
+.gcol-diff {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.gcol-member {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.member-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.member-status.done {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .group-actions {
+    flex-wrap: wrap;
+  }
+}
