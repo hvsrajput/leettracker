@@ -18,7 +18,6 @@ export default function Problems() {
 
   // LeetCode Import State
   const [showImportModal, setShowImportModal] = useState(false);
-  const [lcUsername, setLcUsername] = useState('');
   const [lcSessionCookie, setLcSessionCookie] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
@@ -138,21 +137,19 @@ export default function Problems() {
   };
 
   const handleImport = async () => {
-    if (!lcUsername.trim() && !lcSessionCookie.trim()) return;
+    if (!lcSessionCookie.trim()) return;
     setIsImporting(true);
     setImportError('');
     setImportResult('');
     try {
       const res = await api.post('/leetcode/import', { 
-        username: lcUsername.trim(),
         sessionCookie: lcSessionCookie.trim()
       });
-      const { solved, attempted, alreadyExists, failed, total } = res.data;
-      let msg = `Found ${total} submissions. ${solved} solved, ${attempted || 0} attempted imported.`;
+      const { solved, alreadyExists, failed, total } = res.data;
+      let msg = `Found ${total} solved submissions. Imported ${solved} new problems.`;
       if (alreadyExists) msg += ` ${alreadyExists} already tracked.`;
-      if (failed) msg += ` ${failed} couldn't be fetched.`;
+      if (failed) msg += ` ${failed} unmapped/failed.`;
       setImportResult(msg);
-      setLcUsername('');
       setLcSessionCookie('');
       fetchProblems();
     } catch (err) {
@@ -575,17 +572,6 @@ export default function Problems() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm text-gray-300 font-medium mb-1.5 block">LeetCode Username</label>
-                  <input
-                    type="text"
-                    value={lcUsername}
-                    onChange={e => setLcUsername(e.target.value)}
-                    placeholder="e.g. hvsrajput"
-                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600"
-                    disabled={isImporting}
-                  />
-                </div>
-                <div>
                   <label className="text-sm text-gray-300 font-medium mb-1.5 block flex justify-between">
                     Session Cookie <span className="text-gray-500 font-normal ml-2 tracking-wide">(Required)</span>
                   </label>
@@ -619,7 +605,7 @@ export default function Problems() {
                 <button 
                   className="flex-[2] py-2.5 px-4 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 flex items-center justify-center gap-2" 
                   onClick={handleImport} 
-                  disabled={isImporting || (!lcUsername.trim() && !lcSessionCookie.trim())}
+                  disabled={isImporting || !lcSessionCookie.trim()}
                 >
                   {isImporting ? 'Syncing...' : 'Sync Problems'}
                 </button>
