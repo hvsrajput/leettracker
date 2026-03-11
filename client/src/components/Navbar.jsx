@@ -1,14 +1,27 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { NavLink, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!user) return null;
 
@@ -39,32 +52,55 @@ export default function Navbar() {
               </svg>
               Groups
             </NavLink>
-            <NavLink to="/profile" className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${isActive ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200 hover:scale-[1.02]'}`}>
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-              </svg>
-              Profile
-            </NavLink>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm font-medium border border-blue-500/30">
+        <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+          <button 
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-white/5 transition-all duration-200 group"
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm font-medium border border-blue-500/30 group-hover:border-blue-500/50 transition-colors">
               {user.username.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium text-gray-200 hidden sm:block">{user.username}</span>
-          </div>
-          <div className="w-px h-6 bg-white/10"></div>
-          <button 
-            onClick={handleLogout} 
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-all duration-200 p-2 rounded-lg hover:bg-white/5 hover:scale-[1.05]"
-            title="Logout"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+            <div className="flex flex-col items-start hidden sm:flex">
+                <span className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors">{user.username}</span>
+                <span className="text-[10px] text-gray-500 group-hover:text-gray-400">Personal Account</span>
+            </div>
+            <svg 
+              className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} 
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl shadow-black/50 py-2 animate-in fade-in zoom-in duration-200 origin-top-right overflow-hidden">
+              <Link 
+                to="/profile" 
+                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                onClick={() => setIsDropdownOpen(false)}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+                Profile
+              </Link>
+              
+              <div className="border-t border-white/5 my-1"></div>
+              
+              <button 
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+                </svg>
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>

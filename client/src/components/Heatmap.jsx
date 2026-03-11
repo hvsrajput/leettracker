@@ -60,11 +60,10 @@ export default function Heatmap({ data }) {
 
   const getColorClass = (count) => {
     if (count === -1) return 'bg-white/5 border border-white/5'; 
-    if (count === 0) return 'bg-white/5 border border-white/10';
-    if (count >= 10) return 'bg-[#39d353]';
-    if (count >= 5) return 'bg-[#26a641]'; 
-    if (count >= 2) return 'bg-[#006d32]'; 
-    return 'bg-[#0e4429]';
+    if (count === 0) return 'bg-neutral-800 border border-white/5';
+    if (count >= 3) return 'bg-green-500';
+    if (count >= 2) return 'bg-green-600'; 
+    return 'bg-green-700'; 
   };
 
   const handleMouseEnter = (e, day) => {
@@ -85,7 +84,7 @@ export default function Heatmap({ data }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-lg shadow-black/30 w-full animate-fade-in">
+    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-lg shadow-black/30 w-full animate-fade-in">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
           <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -98,55 +97,50 @@ export default function Heatmap({ data }) {
 
       <div className="flex flex-col lg:flex-row items-start w-full">
         <div className="w-full flex justify-center overflow-hidden pb-4">
-        <div className="relative min-w-max">
-          {/* Months Header */}
-          <div className="flex relative h-6 text-xs font-medium text-gray-500">
-            {monthLabels.map((m, i) => (
-              <span 
-                key={i} 
-                className="absolute"
-                style={{ left: `calc(${m.weekIndex} * 26px)` }} // 20px cell + 6px gap
-              >
-                {m.label}
-              </span>
-            ))}
-          </div>
-
-          <div className="flex gap-2">
-            {/* Days Legend */}
-            <div className="grid grid-rows-7 gap-[6px] text-[10px] font-medium text-gray-500 pr-2 pt-[2px]">
-              <span className="row-start-1 h-5 flex items-center pr-2">Mon</span>
-              <span className="row-start-2 h-5 flex items-center pr-2">Tue</span>
-              <span className="row-start-3 h-5 flex items-center pr-2">Wed</span>
-              <span className="row-start-4 h-5 flex items-center pr-2">Thu</span>
-              <span className="row-start-5 h-5 flex items-center pr-2">Fri</span>
-              <span className="row-start-6 h-5 flex items-center pr-2">Sat</span>
-              <span className="row-start-7 h-5 flex items-center pr-2">Sun</span>
-            </div>
-
-            {/* Heatmap Grid */}
-            <div className="grid grid-rows-7 grid-flow-col gap-[6px]">
-              {calendarData.map((day, i) => (
-                <div 
+          <div className="relative min-w-max">
+            {/* Months Header */}
+            <div className="flex relative h-6 text-[10px] font-medium text-gray-500 mb-1">
+              {monthLabels.map((m, i) => (
+                <span 
                   key={i} 
-                  className={`w-5 h-5 rounded-[4px] transition-all duration-200 ${getColorClass(day.count)} ${day.count !== -1 ? 'hover:ring-2 ring-white/30 cursor-crosshair hover:scale-[1.15]' : ''}`}
-                  onMouseEnter={(e) => handleMouseEnter(e, day)}
-                  onMouseLeave={handleMouseLeave}
-                />
+                  className="absolute"
+                  style={{ left: `calc(${m.weekIndex} * 23px + 36px)` }} // 18px cell + 5px gap + pr-2 padding
+                >
+                  {m.label}
+                </span>
               ))}
             </div>
-          </div>
 
-          {/* Legend Footer */}
-          <div className="flex items-center justify-end gap-2 mt-5 text-xs font-medium text-gray-500">
-            <span>Less</span>
-            <div className="w-3 h-3 rounded-[3px] bg-white/5 border border-white/10" />
-            <div className="w-3 h-3 rounded-[3px] bg-[#0e4429]" />
-            <div className="w-3 h-3 rounded-[3px] bg-[#006d32]" />
-            <div className="w-3 h-3 rounded-[3px] bg-[#26a641]" />
-            <div className="w-3 h-3 rounded-[3px] bg-[#39d353]" />
-            <span>More</span>
-          </div>
+            <div className="flex gap-2">
+              {/* Days Legend */}
+              <div className="grid grid-rows-7 gap-[5px] text-[9px] font-medium text-gray-500 pr-2 pt-[2px]">
+                <span className="row-start-2 h-[18px] flex items-center pr-1">Mon</span>
+                <span className="row-start-4 h-[18px] flex items-center pr-1">Wed</span>
+                <span className="row-start-6 h-[18px] flex items-center pr-1">Fri</span>
+              </div>
+
+              {/* Heatmap Grid */}
+              <div className="grid grid-rows-7 grid-flow-col gap-[5px]">
+                {calendarData.map((day, i) => (
+                  <div 
+                    key={i} 
+                    className={`w-[18px] h-[18px] rounded-sm transition-all duration-200 ${getColorClass(day.count)} ${day.count !== -1 ? 'hover:scale-110 cursor-pointer' : ''}`}
+                    onMouseEnter={(e) => handleMouseEnter(e, day)}
+                    onMouseLeave={handleMouseLeave}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Legend Footer */}
+            <div className="flex items-center justify-end gap-1.5 mt-4 text-[10px] font-medium text-gray-500">
+              <span>Less</span>
+              <div className="w-[10px] h-[10px] rounded-sm bg-neutral-800" />
+              <div className="w-[10px] h-[10px] rounded-sm bg-green-700" />
+              <div className="w-[10px] h-[10px] rounded-sm bg-green-600" />
+              <div className="w-[10px] h-[10px] rounded-sm bg-green-500" />
+              <span>More</span>
+            </div>
 
           {/* Tooltip Overlay */}
           {tooltip.show && (

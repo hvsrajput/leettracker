@@ -178,48 +178,91 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      const query = `
+      // We use a dual approach: 
+      // 1. Get ALL solved slugs (to ensure we don't miss anything)
+      // 2. Get recent submission timestamps (to populate the heatmap)
+      const profileQuery = `
         query userProfileUserQuestionProgressV2($userSlug: String!) {
           userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-            acceptedQuestionList {
+            acceptedQuestionList { titleSlug }
+          }
+        }
+      `;
+
+      const subQuery = `
+        query submissionList($offset: Int!, $limit: Int!) {
+          submissionList(offset: $offset, limit: $limit) {
+            hasNext
+            submissions {
               titleSlug
+              statusDisplay
+              timestamp
             }
           }
         }
       `;
 
       const solvedSlugs = new Set();
+      const dateMap = new Map();
       
       try {
-        const resp = await axios.post('https://leetcode.com/graphql', {
-          query,
+        // Step 1: Get all AC slugs
+        const profileResp = await axios.post('https://leetcode.com/graphql', {
+          query: profileQuery,
           variables: { userSlug: username }
         }, {
-          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
+          headers: { 'Content-Type': 'application/json' },
           timeout: 10000
         });
         
-        const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
+        const accepted = profileResp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
         accepted.forEach(q => solvedSlugs.add(q.titleSlug));
+
+        // Step 2: Get recent submission dates (Limited pages to avoid timeouts/blocks)
+        let offset = 0;
+        let hasNext = true;
+        let pages = 0;
+        while (hasNext && pages < 3) {
+          const subResp = await axios.post('https://leetcode.com/graphql', {
+            query: subQuery,
+            variables: { offset, limit: 20 }
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000
+          });
+
+          const list = subResp.data?.data?.submissionList;
+          if (!list) break;
+
+          list.submissions.forEach(sub => {
+            if (sub.statusDisplay === 'Accepted' && !dateMap.has(sub.titleSlug)) {
+              dateMap.set(sub.titleSlug, new Date(parseInt(sub.timestamp) * 1000).toISOString());
+            }
+          });
+
+          hasNext = list.hasNext;
+          offset += 20;
+          pages++;
+        }
       } catch (err) {
         console.error('GraphQL Sync Error:', err.message);
       }
 
-      const timestamp = new Date().toISOString();
+      const defaultTimestamp = new Date().toISOString();
       let solvedCount = 0;
-      let attemptedCount = 0;
 
       for (const slug of solvedSlugs) {
         const problemData = datasetMapBySlug.get(slug);
         if (problemData) {
           const num = problemData.number;
+          const ts = dateMap.get(slug) || defaultTimestamp;
           await ensureProblemExists(problemData, req.userId);
-          const result = await updateProgress(req.userId, num, 'solved', timestamp);
+          const result = await updateProgress(req.userId, num, 'solved', ts);
           if (result === 'solved') solvedCount++;
         }
       }
 
-      res.json({ success: true, solved: solvedCount, attempted: attemptedCount });
+      res.json({ success: true, solved: solvedCount, totalFound: solvedSlugs.size });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);
       res.status(500).json({ error: 'Failed to sync from LeetCode' });
