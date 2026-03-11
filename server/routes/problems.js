@@ -1,6 +1,6 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
-const { putItem, getItem, queryItems, scanItems, updateItem } = require('../db/dynamodb');
+const { putItem, getItem, queryItems, scanItems, updateItem, deleteItem } = require('../db/dynamodb');
 
 const router = express.Router();
 
@@ -55,7 +55,7 @@ module.exports = function () {
   // Get problems with filters
   router.get('/', auth, async (req, res) => {
     try {
-      const { pattern, difficulty, solved } = req.query;
+      const { pattern, difficulty, solved, company } = req.query;
 
       // Get all problems
       let problems = await scanItems(
@@ -76,28 +76,43 @@ module.exports = function () {
       const progressMap = {};
       progressItems.forEach(p => {
         const lcNum = p.SK.replace('PROB#', '');
-        progressMap[lcNum] = p.solved;
+        // Backward compatible: derive status from solved field if status is missing
+        const status = p.status || (p.solved === 1 ? 'solved' : 'unsolved');
+        progressMap[lcNum] = { solved: p.solved, status };
       });
 
-      // Attach solved status
-      let result = problems.map(p => ({
-        id: p.leetcodeNumber, // Use leetcode number as ID
-        leetcode_number: p.leetcodeNumber,
-        title: p.title,
-        slug: p.slug,
-        difficulty: p.difficulty,
-        url: p.url,
-        pattern_name: p.patternName || null,
-        added_by: p.addedBy,
-        created_at: p.createdAt,
-        solved: progressMap[String(p.leetcodeNumber)] || 0,
-      }));
+      // Attach solved status and companies from dataset
+      let result = problems.map(p => {
+        const datasetEntry = datasetMap.get(p.leetcodeNumber);
+        const progress = progressMap[String(p.leetcodeNumber)];
+        return {
+          id: p.leetcodeNumber,
+          leetcode_number: p.leetcodeNumber,
+          title: p.title,
+          slug: p.slug,
+          difficulty: p.difficulty,
+          url: p.url,
+          pattern_name: p.patternName || null,
+          added_by: p.addedBy,
+          created_at: p.createdAt,
+          solved: progress?.solved || 0,
+          status: progress?.status || 'unsolved',
+          companies: datasetEntry ? (datasetEntry.companies || []) : []
+        };
+      });
 
-      // Filter by solved status
+      // Filter by solved/attempted/unsolved status
       if (solved === 'true') {
-        result = result.filter(p => p.solved === 1);
+        result = result.filter(p => p.status === 'solved');
       } else if (solved === 'false') {
-        result = result.filter(p => p.solved === 0 || !p.solved);
+        result = result.filter(p => p.status === 'unsolved');
+      } else if (solved === 'attempted') {
+        result = result.filter(p => p.status === 'attempted');
+      }
+
+      // Filter by company
+      if (company && company !== 'all') {
+        result = result.filter(p => p.companies.includes(company));
       }
 
       // Sort by leetcode number
@@ -151,6 +166,19 @@ module.exports = function () {
       }
 
       const createdAt = new Date().toISOString();
+
+      if (patternName) {
+        const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+        if (existingPattern.length === 0) {
+          await putItem({
+            PK: 'PATTERN',
+            SK: `PAT#${patternName}`,
+            name: patternName,
+            isDefault: 0,
+            createdBy: req.userId,
+          });
+        }
+      }
 
       await putItem({
         PK: `PROBLEM#${num}`,
@@ -220,6 +248,55 @@ module.exports = function () {
     } catch (err) {
       console.error('Toggle error:', err);
       res.status(500).json({ error: 'Failed to toggle problem status' });
+    }
+  });
+
+  // Delete problem
+  router.delete('/:id', auth, async (req, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
+      
+      const existing = await getItem(`PROBLEM#${problemId}`, 'DETAIL');
+      if (!existing) {
+        return res.status(404).json({ error: 'Problem not found' });
+      }
+
+      // Delete the problem detail
+      await deleteItem(`PROBLEM#${problemId}`, 'DETAIL');
+      
+      // Clean up all PROGRESS# items for this problem across all users
+      const progressItems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROGRESS#', ':sk': `PROB#${problemId}` }
+      );
+      for (const pi of progressItems) {
+        await deleteItem(pi.PK, pi.SK);
+      }
+
+      // Clean up all GROUP# PROBLEM# entries referencing this problem
+      const groupProblemItems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'GROUP#', ':sk': `PROBLEM#${problemId}` }
+      );
+      for (const gp of groupProblemItems) {
+        await deleteItem(gp.PK, gp.SK);
+      }
+
+      // Clean up orphaned pattern if no other problems use it
+      if (existing.patternName) {
+        const remaining = await scanItems(
+          'begins_with(PK, :prefix) AND patternName = :pattern',
+          { ':prefix': 'PROBLEM#', ':pattern': existing.patternName }
+        );
+        if (remaining.length === 0) {
+          await deleteItem('PATTERN', `PAT#${existing.patternName}`);
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Delete problem error:', err);
+      res.status(500).json({ error: 'Failed to delete problem' });
     }
   });
 

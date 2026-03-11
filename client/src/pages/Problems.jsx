@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
-import './Problems.css';
 
 export default function Problems() {
   const [problems, setProblems] = useState([]);
@@ -9,6 +8,7 @@ export default function Problems() {
   const [activePattern, setActivePattern] = useState('all');
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [solvedFilter, setSolvedFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPatternModal, setShowPatternModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,6 +21,7 @@ export default function Problems() {
   // LeetCode Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [lcUsername, setLcUsername] = useState('');
+  const [lcSessionCookie, setLcSessionCookie] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
   const [importError, setImportError] = useState('');
@@ -30,6 +31,7 @@ export default function Problems() {
     if (activePattern !== 'all') params.append('pattern', activePattern);
     if (difficultyFilter) params.append('difficulty', difficultyFilter);
     if (solvedFilter) params.append('solved', solvedFilter);
+    if (companyFilter) params.append('company', companyFilter);
 
     api.get(`/problems?${params.toString()}`)
       .then(res => setProblems(res.data))
@@ -44,7 +46,7 @@ export default function Problems() {
   useEffect(() => {
     setLoading(true);
     fetchProblems();
-  }, [activePattern, difficultyFilter, solvedFilter]);
+  }, [activePattern, difficultyFilter, solvedFilter, companyFilter]);
 
   let searchTimeout = null;
 
@@ -103,10 +105,22 @@ export default function Problems() {
     try {
       const res = await api.post(`/problems/${problemId}/toggle`);
       setProblems(prev => prev.map(p => 
-        p.id === problemId ? { ...p, solved: res.data.solved } : p
+        p.id === problemId ? { ...p, solved: res.data.solved, status: res.data.status } : p
       ));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleDelete = async (problemId, problemTitle) => {
+    if (window.confirm(`Are you sure you want to delete "${problemTitle}" from the tracker?`)) {
+      try {
+        await api.delete(`/problems/${problemId}`);
+        setProblems(prev => prev.filter(p => p.id !== problemId));
+        api.get('/patterns').then(res => setPatterns(res.data)).catch(console.error);
+      } catch (err) {
+        console.error('Failed to delete problem', err);
+      }
     }
   };
 
@@ -123,15 +137,23 @@ export default function Problems() {
   };
 
   const handleImport = async () => {
-    if (!lcUsername.trim()) return;
+    if (!lcUsername.trim() && !lcSessionCookie.trim()) return;
     setIsImporting(true);
     setImportError('');
     setImportResult('');
     try {
-      const res = await api.post('/leetcode/import', { username: lcUsername.trim() });
-      setImportResult(`Successfully imported ${res.data.imported} new solutions!`);
+      const res = await api.post('/leetcode/import', { 
+        username: lcUsername.trim(),
+        sessionCookie: lcSessionCookie.trim()
+      });
+      const { solved, attempted, alreadyExists, failed, total } = res.data;
+      let msg = `Found ${total} submissions. ${solved} solved, ${attempted || 0} attempted imported.`;
+      if (alreadyExists) msg += ` ${alreadyExists} already tracked.`;
+      if (failed) msg += ` ${failed} couldn't be fetched.`;
+      setImportResult(msg);
       setLcUsername('');
-      fetchProblems(); // Refresh the grid
+      setLcSessionCookie('');
+      fetchProblems();
     } catch (err) {
       setImportError(err.response?.data?.error || 'Failed to import from LeetCode');
     } finally {
@@ -139,185 +161,352 @@ export default function Problems() {
     }
   };
 
-  const solvedCount = problems.filter(p => p.solved).length;
-
   return (
-    <div className="problems-page container animate-fade-in">
-      <div className="page-header">
+    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1>Problems</h1>
-          <p className="page-desc">
-            {solvedCount} of {problems.length} solved
+          <h1 className="text-3xl font-bold text-white tracking-tight">Problems</h1>
+          <p className="text-gray-400 mt-2">
+            {problems.filter(p => p.status === 'solved').length} solved, {problems.filter(p => p.status === 'attempted').length} attempted of {problems.length}
             {activePattern !== 'all' && ` in ${activePattern}`}
           </p>
         </div>
-        <div className="flex gap-4">
-          <button className="btn btn-secondary flex items-center gap-2" onClick={() => setShowImportModal(true)}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <div className="flex flex-wrap items-center gap-4">
+          <button 
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all font-medium text-sm text-gray-200"
+            onClick={() => setShowImportModal(true)}
+          >
+            <svg className="w-5 h-5 text-[#FFA116]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             Import from LeetCode
           </button>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            + Add Problem
+          <button 
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 border border-green-500 transition-all font-medium text-sm text-white shadow-lg shadow-green-900/20"
+            onClick={() => setShowAddModal(true)}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Problem
           </button>
         </div>
       </div>
 
-      {/* Pattern Tabs */}
-      <div className="pattern-tabs-container">
-        <div className="pattern-tabs">
-          <button 
-            className={`pattern-tab ${activePattern === 'all' ? 'active' : ''}`}
-            onClick={() => setActivePattern('all')}
-          >
-            All
-          </button>
-          {patterns.map(p => (
-            <button 
-              key={p.id}
-              className={`pattern-tab ${activePattern === p.name ? 'active' : ''}`}
-              onClick={() => setActivePattern(p.name)}
+
+      {/* Advanced Filter Panel */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20">
+        <h3 className="text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
+          Match <span className="bg-black/50 px-2 py-1 rounded text-white border border-white/10">All</span> of the following filters:
+        </h3>
+        
+        <div className="space-y-3">
+          {/* Status Filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
+            <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <span className="text-sm">Status</span>
+            </div>
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
+              <span>is</span>
+              <svg className="w-3 h-3 ml-auto opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <select 
+              className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-indigo-500 appearance-none bg-no-repeat bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5H7z%22%20fill%3D%22%23ffffff40%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] pr-10"
+              value={solvedFilter} 
+              onChange={e => setSolvedFilter(e.target.value)}
             >
-              {p.name}
+              <option value="">Any Status</option>
+              <option value="true">Solved</option>
+              <option value="attempted">Attempted</option>
+              <option value="false">Unsolved</option>
+            </select>
+            <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setSolvedFilter('')}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
             </button>
-          ))}
+          </div>
+
+          {/* Difficulty Filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
+            <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+              </svg>
+              <span className="text-sm">Difficulty</span>
+            </div>
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
+              <span>is</span>
+              <svg className="w-3 h-3 ml-auto opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <select 
+              className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-indigo-500 appearance-none bg-no-repeat bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5H7z%22%20fill%3D%22%23ffffff40%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] pr-10"
+              value={difficultyFilter} 
+              onChange={e => setDifficultyFilter(e.target.value)}
+            >
+              <option value="">Any Difficulty</option>
+              <option value="Easy">Easy</option>
+              <option value="Medium">Medium</option>
+              <option value="Hard">Hard</option>
+            </select>
+            <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setDifficultyFilter('')}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
+            </button>
+          </div>
+
+          {/* Topics Filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
+            <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
+              </svg>
+              <span className="text-sm">Topics</span>
+            </div>
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
+              <span>is</span>
+              <svg className="w-3 h-3 ml-auto opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <select 
+              className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-indigo-500 appearance-none bg-no-repeat bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5H7z%22%20fill%3D%22%23ffffff40%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] pr-10"
+              value={activePattern === 'all' ? '' : activePattern} 
+              onChange={e => setActivePattern(e.target.value || 'all')}
+            >
+              <option value="">Any Topic</option>
+              {patterns.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+            <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setActivePattern('all')}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
+            </button>
+          </div>
+
+          {/* Company Filter */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
+            <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" />
+              </svg>
+              <span className="text-sm">Company</span>
+            </div>
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
+              <span>is</span>
+              <svg className="w-3 h-3 ml-auto opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </div>
+            <select 
+              className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-indigo-500 appearance-none bg-no-repeat bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5H7z%22%20fill%3D%22%23ffffff40%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] pr-10"
+              value={companyFilter} 
+              onChange={e => setCompanyFilter(e.target.value)}
+            >
+              <option value="">Any Company</option>
+              <option value="Amazon">Amazon</option>
+              <option value="Google">Google</option>
+              <option value="Meta">Meta</option>
+              <option value="Microsoft">Microsoft</option>
+              <option value="Apple">Apple</option>
+              <option value="Uber">Uber</option>
+              <option value="Adobe">Adobe</option>
+              <option value="Netflix">Netflix</option>
+            </select>
+            <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setCompanyFilter('')}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
+            </button>
+          </div>
+          
+          <div className="pt-2">
+            <button className="text-gray-400 hover:text-white transition-colors p-1" title="Add Filter">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            </button>
+          </div>
+        </div>
+        
+        <div className="mt-6 flex justify-between items-center border-t border-white/10 pt-4">
+          <button className="text-purple-400 hover:text-purple-300 font-medium text-sm flex items-center gap-2 transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 20.25Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
+            Save as Smart List
+          </button>
           <button 
-            className="pattern-tab tab-add"
-            onClick={() => setShowPatternModal(true)}
-            title="Add custom pattern"
+            className="text-gray-400 hover:text-white font-medium text-sm flex items-center gap-2 transition-colors"
+            onClick={() => { setDifficultyFilter(''); setSolvedFilter(''); setCompanyFilter(''); setActivePattern('all'); }}
           >
-            +
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+            Reset
           </button>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div className="filters-bar">
-        <select value={difficultyFilter} onChange={e => setDifficultyFilter(e.target.value)}>
-          <option value="">All Difficulties</option>
-          <option value="Easy">Easy</option>
-          <option value="Medium">Medium</option>
-          <option value="Hard">Hard</option>
-        </select>
-        <select value={solvedFilter} onChange={e => setSolvedFilter(e.target.value)}>
-          <option value="">All Status</option>
-          <option value="true">Solved</option>
-          <option value="false">Unsolved</option>
-        </select>
       </div>
 
       {/* Problem List */}
       {loading ? (
-        <div className="page-loading">Loading problems...</div>
+        <div className="flex items-center justify-center min-h-[300px] text-gray-400">Loading problems...</div>
       ) : problems.length === 0 ? (
-        <div className="empty-state">
-          <span className="empty-icon text-gray-400">
-            <svg className="w-12 h-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-            </svg>
-          </span>
-          <h3>No problems yet</h3>
-          <p>Add your first problem to start tracking!</p>
+        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-12 flex flex-col items-center justify-center text-center">
+          <svg className="w-16 h-16 text-gray-600 mb-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+          </svg>
+          <h3 className="text-xl font-semibold text-white mb-2">No problems found</h3>
+          <p className="text-gray-400 mb-6">Add your first problem or adjust your filters.</p>
+          <button className="btn btn-primary bg-white text-black hover:bg-gray-200 px-6 py-2 rounded-lg font-medium transition-colors" onClick={() => setShowAddModal(true)}>
+            Add Problem
+          </button>
         </div>
       ) : (
-        <div className="problem-table">
-          <div className="problem-header-row">
-            <span className="col-check">Status</span>
-            <span className="col-num">#</span>
-            <span className="col-title">Title</span>
-            <span className="col-diff">Difficulty</span>
-            <span className="col-pattern">Pattern</span>
+        <div className="rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-hidden">
+          <div className="grid grid-cols-[48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
+            <span className="text-center">Status</span>
+            <span>#</span>
+            <span>Title</span>
+            <span>Difficulty</span>
+            <span>Pattern / Company</span>
+            <span className="text-center">Del</span>
           </div>
-          {problems.map((p, i) => (
-            <div 
-              className={`problem-row ${p.solved ? 'solved' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30 cursor-pointer`} 
-              key={p.id}
-              style={{ animationDelay: `${i * 0.03}s` }}
-            >
-              <span className="col-check">
-                <button 
-                  className={`check-btn ${p.solved ? 'checked' : ''}`}
-                  onClick={() => handleToggle(p.id)}
-                  title={p.solved ? 'Mark unsolved' : 'Mark solved'}
-                >
-                  {p.solved ? '✓' : ''}
-                </button>
-              </span>
-              <span className="col-num">{p.leetcode_number}</span>
-              <span className="col-title">
-                <a href={p.url} target="_blank" rel="noopener noreferrer" className="problem-link">
-                  {p.title}
-                </a>
-              </span>
-              <span className="col-diff">
-                <span className={`badge badge-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
-              </span>
-              <span className="col-pattern">
-                {p.pattern_name && (
-                  <span className="badge badge-pattern">{p.pattern_name}</span>
-                )}
-              </span>
-            </div>
-          ))}
+          <div className="divide-y divide-white/5">
+            {problems.map((p, i) => (
+              <div 
+                className={`grid grid-cols-[48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
+                key={p.id}
+              >
+                <div className="flex justify-center flex-shrink-0">
+                  <button 
+                    className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                      p.status === 'solved' ? 'bg-green-500 border border-green-500 text-black' : 
+                      p.status === 'attempted' ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-500' : 
+                      'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
+                    }`}
+                    onClick={() => handleToggle(p.id)}
+                    title={p.status === 'solved' ? 'Mark unsolved' : 'Mark solved'}
+                  >
+                    {p.status === 'solved' && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                    )}
+                    {p.status === 'attempted' && (
+                      <div className="w-2 h-2 rounded-full bg-current"></div>
+                    )}
+                  </button>
+                </div>
+                <span className="font-mono text-gray-500">#{p.leetcode_number}</span>
+                <span className="truncate">
+                  <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-200 hover:text-indigo-400 transition-colors">
+                    {p.title}
+                  </a>
+                </span>
+                <span>
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
+                    p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                    p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                    'bg-red-500/10 text-red-400 border-red-500/20'
+                  }`}>
+                    {p.difficulty}
+                  </span>
+                </span>
+                <div className="flex flex-wrap gap-2 pr-2">
+                  {p.pattern_name && (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 truncate max-w-full">
+                      {p.pattern_name}
+                    </span>
+                  )}
+                  {p.companies && p.companies.length > 0 && (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20 truncate max-w-full hidden sm:inline-block">
+                      {p.companies[0]}
+                    </span>
+                  )}
+                </div>
+                <div className="flex justify-center">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }} 
+                    className="p-1.5 text-gray-600 hover:text-red-500 transition-colors hover:bg-red-500/10 rounded-md" 
+                    title="Delete problem"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Add Problem Modal */}
       {showAddModal && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
-            <h2>Add Problem</h2>
-            <div className="form-group search-group">
-              <label>Search Problem (Title or Number)</label>
-              <div className="search-input-wrapper">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => handleSearch(e.target.value)}
-                  placeholder="e.g. Two Sum, 1..."
-                  autoComplete="off"
-                />
-                {isSearching && <span className="search-spinner">...</span>}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-white mb-6">Add Problem</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Search Title or #</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => handleSearch(e.target.value)}
+                    placeholder="e.g. Two Sum..."
+                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white pl-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder-gray-600"
+                    autoComplete="off"
+                  />
+                  <svg className="w-5 h-5 absolute left-3 top-3 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                  </svg>
+                  {isSearching && <span className="absolute right-3 top-2.5 text-indigo-400">
+                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </span>}
+                </div>
+                
+                {searchResults.length > 0 && (
+                  <div className="absolute left-6 right-6 mt-1 bg-neutral-800 border border-white/10 rounded-lg shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto">
+                    {searchResults.map(res => (
+                      <div 
+                        key={res.number} 
+                        className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0"
+                        onClick={() => handleSelectProblem(res)}
+                      >
+                        <span className="text-gray-500 font-mono text-xs w-8">#{res.number}</span>
+                        <span className="font-medium text-gray-200 flex-1 truncate">{res.title}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          res.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400' : 
+                          res.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400' : 
+                          'bg-red-500/10 text-red-400'
+                        }`}>{res.difficulty}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              {searchResults.length > 0 && (
-                <div className="autocomplete-dropdown">
-                  {searchResults.map(res => (
-                    <div 
-                      key={res.number} 
-                      className="autocomplete-item"
-                      onClick={() => handleSelectProblem(res)}
-                    >
-                      <span className="ac-num">#{res.number}</span>
-                      <span className="ac-title">{res.title}</span>
-                      <span className={`ac-diff badge badge-${res.difficulty.toLowerCase()}`}>{res.difficulty}</span>
-                    </div>
-                  ))}
+
+              {addError && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{addError}</div>}
+
+              {preview && (
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4 mt-4">
+                  <div className="font-medium text-white mb-2">{preview.title}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      preview.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                      preview.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                      'bg-red-500/10 text-red-400 border-red-500/20'
+                    } border`}>{preview.difficulty}</span>
+                    {preview.topics && preview.topics.map(t => (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20" key={t}>{t}</span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
 
-            {addError && <div className="auth-error">{addError}</div>}
-
-            {preview && (
-              <div className="preview-card">
-                <div className="preview-title">{preview.title}</div>
-                <div className="preview-meta">
-                  <span className={`badge badge-${preview.difficulty.toLowerCase()}`}>{preview.difficulty}</span>
-                  {preview.topics && preview.topics.map(t => (
-                    <span className="badge badge-pattern" key={t}>{t}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowAddModal(false); setPreview(null); setSearchQuery(''); setSearchResults([]); }}>
+            <div className="flex justify-end gap-3 mt-8">
+              <button className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors" onClick={() => { setShowAddModal(false); setPreview(null); setSearchQuery(''); setSearchResults([]); }}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleAddProblem} disabled={!preview}>
-                Add Problem
+              <button 
+                className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                onClick={handleAddProblem} 
+                disabled={!preview}
+              >
+                Save
               </button>
             </div>
           </div>
@@ -326,63 +515,121 @@ export default function Problems() {
 
       {/* Add Pattern Modal */}
       {showPatternModal && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowPatternModal(false)}>
-          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
-            <h2>Add Custom Pattern</h2>
-            <div className="form-group">
-              <label>Pattern Name</label>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowPatternModal(false)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-white mb-6">Add Custom Pattern</h2>
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-gray-400 mb-2">Pattern Name</label>
               <input
                 type="text"
                 value={newPatternName}
                 onChange={e => setNewPatternName(e.target.value)}
-                placeholder="e.g. Monotonic Stack, Trie..."
+                placeholder="e.g. Dynamic Programming"
+                className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder-gray-600"
                 onKeyDown={e => e.key === 'Enter' && handleAddPattern()}
+                autoFocus
               />
             </div>
-            <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => setShowPatternModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleAddPattern}>Add Pattern</button>
+            <div className="flex justify-end gap-3 mt-8">
+              <button className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors" onClick={() => setShowPatternModal(false)}>Cancel</button>
+              <button className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors" onClick={handleAddPattern}>Add</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Import Modal */}
+      
+      {/* Connect LeetCode Modal */}
       {showImportModal && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => !isImporting && setShowImportModal(false)}>
-          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
-            <h2>Import from LeetCode</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Enter your LeetCode username to automatically import your mostly recently accepted submissions and update your tracker.
-            </p>
-            <div className="form-group">
-              <label>LeetCode Username</label>
-              <input
-                type="text"
-                value={lcUsername}
-                onChange={e => setLcUsername(e.target.value)}
-                placeholder="e.g. hvsrajput"
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => !isImporting && setShowImportModal(false)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1c1c1c] p-6 border-b border-white/10 relative">
+              <button 
+                onClick={() => !isImporting && setShowImportModal(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
                 disabled={isImporting}
-                onKeyDown={e => e.key === 'Enter' && handleImport()}
-              />
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FFA116]/10 flex items-center justify-center border border-[#FFA116]/20">
+                  <svg className="w-6 h-6 text-[#FFA116]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.105 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.939 5.939 0 0 0 1.271 1.541 5.995 5.995 0 0 0 .678.463 6.115 6.115 0 0 0 1.08.452 6.324 6.324 0 0 0 1.954.218 6.426 6.426 0 0 0 1.109-.134 6.55 6.55 0 0 0 1.97-.68 6.57 6.57 0 0 0 .445-.278 6.643 6.643 0 0 0 .848-.731l6.19-6.6a1.365 1.365 0 0 0 .408-.98 1.353 1.353 0 0 0-.411-.986l-2.092-2.228a1.354 1.354 0 0 0-.974-.423 1.366 1.366 0 0 0-.966.428l-5.694 6.07a1.27 1.27 0 0 1-.9.395 1.246 1.246 0 0 1-.892-.379l-1.636-1.742a1.26 1.26 0 0 1-.378-.893 1.278 1.278 0 0 1 .378-.9l6.305-6.721A1.368 1.368 0 0 0 13.483 0zm-2.866 12.815a1.362 1.362 0 0 0-.96.44l-2.24 2.39a1.351 1.351 0 0 0-.406.983c0 .359.135.703.385.962l2.366 2.516c.26.275.617.432.993.432.378 0 .736-.157.995-.432l2.253-2.396a1.354 1.354 0 0 0 .406-.983 1.34 1.34 0 0 0-.406-.968l-2.39-2.502a1.347 1.347 0 0 0-.996-.442z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white leading-tight">Connect LeetCode</h2>
+                  <p className="text-gray-400 text-sm">Sync your submissions automatically</p>
+                </div>
+              </div>
             </div>
-            {importError && <div className="auth-error">{importError}</div>}
-            {importResult && <div className="text-green-500 mb-4">{importResult}</div>}
-            <div className="form-actions mt-4">
-              <button className="btn btn-secondary" onClick={() => setShowImportModal(false)} disabled={isImporting}>
-                Close
-              </button>
-              <button className="btn btn-primary flex items-center justify-center gap-2" onClick={handleImport} disabled={isImporting || !lcUsername.trim()}>
-                {isImporting ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Importing...
-                  </>
-                ) : 'Import'}
-              </button>
+
+            <div className="p-6">
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-[#FFA116]"></div>
+                <h3 className="font-semibold text-white mb-2 text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[#FFA116]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  How to get your session cookie:
+                </h3>
+                <ol className="text-sm text-gray-400 pl-4 space-y-1.5 list-decimal">
+                  <li>Log in to <a href="https://leetcode.com" target="_blank" rel="noreferrer" className="text-[#FFA116] hover:underline">leetcode.com</a></li>
+                  <li>Right click anywhere → <strong>Inspect</strong> (F12)</li>
+                  <li>Go to <strong>Network</strong> tab, refresh page</li>
+                  <li>Click first request (e.g. `graphql`)</li>
+                  <li>Scroll to <strong>Request Headers</strong> and copy the <code className="bg-black/50 px-1 py-0.5 rounded text-indigo-300 font-mono text-xs">Cookie:</code> value</li>
+                </ol>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-gray-300 font-medium mb-1.5 block">LeetCode Username</label>
+                  <input
+                    type="text"
+                    value={lcUsername}
+                    onChange={e => setLcUsername(e.target.value)}
+                    placeholder="e.g. hvsrajput"
+                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600"
+                    disabled={isImporting}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-300 font-medium mb-1.5 block flex justify-between">
+                    Session Cookie <span className="text-gray-500 font-normal ml-2 tracking-wide">(Required)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={lcSessionCookie}
+                    onChange={e => setLcSessionCookie(e.target.value)}
+                    placeholder="Paste the 'Cookie' header string..."
+                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600 font-mono text-xs"
+                    disabled={isImporting}
+                    onKeyDown={e => e.key === 'Enter' && handleImport()}
+                  />
+                </div>
+              </div>
+
+              {importError && (
+                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{importError}</div>
+              )}
+              {importResult && (
+                <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">{importResult}</div>
+              )}
+
+              <div className="mt-8 flex gap-3">
+                <button 
+                  className="flex-1 py-2.5 px-4 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors disabled:opacity-50" 
+                  onClick={() => setShowImportModal(false)} 
+                  disabled={isImporting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="flex-[2] py-2.5 px-4 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 flex items-center justify-center gap-2" 
+                  onClick={handleImport} 
+                  disabled={isImporting || (!lcUsername.trim() && !lcSessionCookie.trim())}
+                >
+                  {isImporting ? 'Syncing...' : 'Sync Problems'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

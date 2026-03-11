@@ -18,19 +18,25 @@ module.exports = function () {
       const progressMap = {};
       progressItems.forEach(p => {
         const lcNum = p.SK.replace('PROB#', '');
-        progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt };
+        const status = p.status || (p.solved === 1 ? 'solved' : 'unsolved');
+        progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt, status };
       });
 
       const totalProblems = problems.length;
       let totalSolved = 0;
+      let totalAttempted = 0;
 
       // Pattern-wise and difficulty-wise breakdown
       const patternMap = {};
       const difficultyMap = {};
 
       problems.forEach(p => {
-        const isSolved = progressMap[String(p.leetcodeNumber)]?.solved === 1;
+        const progress = progressMap[String(p.leetcodeNumber)];
+        const status = progress?.status || 'unsolved';
+        const isSolved = status === 'solved';
+        const isAttempted = status === 'attempted';
         if (isSolved) totalSolved++;
+        if (isAttempted) totalAttempted++;
 
         // Pattern stats
         if (p.patternName) {
@@ -101,6 +107,7 @@ module.exports = function () {
 
       res.json({
         totalSolved,
+        totalAttempted,
         totalProblems,
         patternStats,
         difficultyStats,
@@ -152,6 +159,123 @@ module.exports = function () {
     } catch (err) {
       console.error('Heatmap error:', err);
       res.status(500).json({ error: 'Failed to load heatmap data' });
+    }
+  });
+
+  // Pattern Heatmap (Strongest, Weakest, Neglected)
+  router.get('/pattern-heatmap/:userId', auth, async (req, res) => {
+    try {
+      const uId = req.params.userId === 'me' ? req.userId : req.params.userId;
+      
+      const problems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
+      );
+
+      const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
+      const progressMap = {};
+      progressItems.forEach(p => {
+        if (p.solved === 1) progressMap[p.SK.replace('PROB#', '')] = true;
+      });
+
+      const patternMap = {};
+      problems.forEach(p => {
+        if (p.patternName) {
+          if (!patternMap[p.patternName]) {
+            patternMap[p.patternName] = { pattern: p.patternName, total: 0, solved: 0 };
+          }
+          patternMap[p.patternName].total++;
+          if (progressMap[String(p.leetcodeNumber)]) {
+            patternMap[p.patternName].solved++;
+          }
+        }
+      });
+
+      const allPatterns = Object.values(patternMap).map(p => ({
+        pattern: p.pattern,
+        percent: p.total > 0 ? Math.round((p.solved / p.total) * 100) : 0,
+        solved: p.solved,
+        total: p.total
+      }));
+
+      allPatterns.sort((a, b) => b.percent - a.percent);
+
+      let strongest = null;
+      let weakest = null;
+      let neglected = null;
+
+      if (allPatterns.length > 0) {
+        strongest = allPatterns[0];
+        // Weakest is the one with lowest % but > 0
+        const attempted = allPatterns.filter(p => p.percent > 0);
+        if (attempted.length > 0) {
+          weakest = attempted[attempted.length - 1];
+        } else {
+          weakest = allPatterns[allPatterns.length - 1];
+        }
+
+        // Neglected is the one with 0% and reasonably high total (or just lowest strictly)
+        const unattempted = allPatterns.filter(p => p.percent === 0).sort((a, b) => b.total - a.total);
+        if (unattempted.length > 0) {
+          neglected = unattempted[0];
+        }
+      }
+
+      res.json({ strongest, weakest, neglected, allPatterns });
+    } catch (err) {
+      console.error('Pattern Heatmap error:', err);
+      res.status(500).json({ error: 'Failed to load pattern heatmap' });
+    }
+  });
+
+  // Company Progress
+  router.get('/company-progress/:userId', auth, async (req, res) => {
+    try {
+      const uId = req.params.userId === 'me' ? req.userId : req.params.userId;
+      
+      const problems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
+      );
+
+      // We need to fetch the company data from the raw dataset, since DynamoDB might not have it yet
+      // if not backfilled, but we can backfill or join on the fly.
+      const problemsDataset = require('../data/problems.json');
+      const companyDataMap = {};
+      problemsDataset.forEach(p => {
+        companyDataMap[p.number] = p.companies || [];
+      });
+
+      const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
+      const progressMap = {};
+      progressItems.forEach(p => {
+        if (p.solved === 1) progressMap[p.SK.replace('PROB#', '')] = true;
+      });
+
+      const companyMap = {};
+      problemsDataset.forEach(p => {
+        (p.companies || []).forEach(company => {
+          if (!companyMap[company]) {
+            companyMap[company] = { company, solved: 0, total: 0 };
+          }
+          companyMap[company].total++;
+          if (progressMap[String(p.number)]) {
+            companyMap[company].solved++;
+          }
+        });
+      });
+
+      const result = Object.values(companyMap)
+        .map(c => ({
+          ...c,
+          percent: c.total > 0 ? Math.round((c.solved / c.total) * 100) : 0
+        }))
+        .sort((a, b) => b.percent - a.percent || b.total - a.total); // Sort by % desc, then total desc
+
+      res.json(result);
+    } catch (err) {
+      console.error('Company Progress error:', err);
+      res.status(500).json({ error: 'Failed to load company progress' });
     }
   });
 
