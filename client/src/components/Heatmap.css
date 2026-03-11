@@ -8,6 +8,19 @@
   overflow-x: auto;
 }
 
+.heatmap-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.heatmap-contribution-count {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .heatmap-header {
   margin-bottom: 0.5rem;
   padding-left: 30px; /* offset for day labels */

@@ -116,6 +116,8 @@ export default function Problems() {
       try {
         await api.delete(`/problems/${problemId}`);
         setProblems(prev => prev.filter(p => p.id !== problemId));
+        // Re-fetch patterns to remove orphaned ones
+        api.get('/patterns').then(res => setPatterns(res.data)).catch(console.error);
       } catch (err) {
         console.error('Failed to delete problem', err);
       }
@@ -144,7 +146,11 @@ export default function Problems() {
         username: lcUsername.trim(),
         sessionCookie: lcSessionCookie.trim()
       });
-      setImportResult(`Successfully imported ${res.data.imported} new solutions!`);
+      const { imported, alreadyExists, failed, total } = res.data;
+      let msg = `Found ${total} AC submissions. Imported ${imported} new.`;
+      if (alreadyExists) msg += ` ${alreadyExists} already tracked.`;
+      if (failed) msg += ` ${failed} couldn't be fetched.`;
+      setImportResult(msg);
       setLcUsername('');
       setLcSessionCookie('');
       fetchProblems(); // Refresh the grid

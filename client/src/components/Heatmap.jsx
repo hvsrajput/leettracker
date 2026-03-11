@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import './Heatmap.css';
 
+
 // 1 year of data
 const WEEKS_TO_SHOW = 52;
 const DAYS_IN_WEEK = 7;
@@ -43,6 +44,10 @@ export default function Heatmap({ data }) {
     return dates;
   }, [data]);
 
+  const totalContributions = useMemo(() => {
+    return calendarData.reduce((sum, d) => sum + (d.count > 0 ? d.count : 0), 0);
+  }, [calendarData]);
+
   // Extract month labels (only place a label when the month changes)
   const monthLabels = useMemo(() => {
     const labels = [];
@@ -71,6 +76,12 @@ export default function Heatmap({ data }) {
 
   return (
     <div className="heatmap-container">
+      <div className="heatmap-title-row">
+        <span className="heatmap-contribution-count">
+          {totalContributions} {totalContributions === 1 ? 'question' : 'questions'} solved in the last year
+        </span>
+      </div>
+
       <div className="heatmap-header">
         <div className="heatmap-months">
           {monthLabels.map((lbl, i) => (

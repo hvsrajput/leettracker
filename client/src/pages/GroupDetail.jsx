@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +14,7 @@ export default function GroupDetail() {
   const [showAddProblem, setShowAddProblem] = useState(false);
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [activePattern, setActivePattern] = useState('all');
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,6 +30,23 @@ export default function GroupDetail() {
   };
 
   useEffect(() => { fetchGroup(); }, [id]);
+
+  // Extract unique patterns from group problems
+  const patterns = useMemo(() => {
+    if (!group?.problems) return [];
+    const patternSet = new Set();
+    group.problems.forEach(p => {
+      if (p.pattern_name) patternSet.add(p.pattern_name);
+    });
+    return Array.from(patternSet).sort();
+  }, [group]);
+
+  // Filter problems by active pattern
+  const filteredProblems = useMemo(() => {
+    if (!group?.problems) return [];
+    if (activePattern === 'all') return group.problems;
+    return group.problems.filter(p => p.pattern_name === activePattern);
+  }, [group, activePattern]);
 
   const handleAddMember = async () => {
     if (!username.trim()) return;
@@ -158,16 +176,42 @@ export default function GroupDetail() {
         ))}
       </div>
 
+      {/* Pattern Tabs */}
+      {patterns.length > 0 && (
+        <div className="pattern-tabs-container">
+          <div className="pattern-tabs">
+            <button 
+              className={`pattern-tab ${activePattern === 'all' ? 'active' : ''}`}
+              onClick={() => setActivePattern('all')}
+            >
+              All ({group.problems?.length})
+            </button>
+            {patterns.map(p => {
+              const count = group.problems.filter(prob => prob.pattern_name === p).length;
+              return (
+                <button 
+                  key={p}
+                  className={`pattern-tab ${activePattern === p ? 'active' : ''}`}
+                  onClick={() => setActivePattern(p)}
+                >
+                  {p} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Group Problem Table */}
-      {group.problems?.length === 0 ? (
+      {filteredProblems.length === 0 ? (
         <div className="empty-state">
           <span className="empty-icon text-gray-400">
             <svg className="w-12 h-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
             </svg>
           </span>
-          <h3>No problems in this group</h3>
-          <p>Add problems by their LeetCode number!</p>
+          <h3>{activePattern === 'all' ? 'No problems in this group' : `No "${activePattern}" problems`}</h3>
+          <p>{activePattern === 'all' ? 'Add problems by their LeetCode number!' : 'Try selecting a different pattern.'}</p>
         </div>
       ) : (
         <div className="group-table">
@@ -181,7 +225,7 @@ export default function GroupDetail() {
               </span>
             ))}
           </div>
-          {group.problems.map((p, i) => (
+          {filteredProblems.map((p, i) => (
             <div 
               className={`group-problem-row ${p.solved ? 'solved' : ''}`}
               key={p.leetcode_number}
