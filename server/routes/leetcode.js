@@ -124,6 +124,9 @@ module.exports = function () {
     if (!username && !sessionCookie) {
       return res.status(400).json({ error: 'LeetCode username or Session Cookie is required' });
     }
+    if (!username) {
+      return res.status(400).json({ error: 'LeetCode username is required for import.' });
+    }
 
     try {
       let solvedCount = 0;
@@ -143,20 +146,25 @@ module.exports = function () {
           }
         `;
 
-        const resp = await axios.post('https://leetcode.com/graphql', {
-          query,
-          variables: { userSlug: username }
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Referer': 'https://leetcode.com',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-          timeout: 10000
-        });
+        try {
+          const resp = await axios.post('https://leetcode.com/graphql', {
+            query,
+            variables: { userSlug: username }
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Referer': 'https://leetcode.com',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+            timeout: 10000
+          });
 
-        const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
-        accepted.forEach(q => solvedSlugs.add(q.titleSlug));
+          const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
+          accepted.forEach(q => solvedSlugs.add(q.titleSlug));
+        } catch (err) {
+          console.error('LeetCode GraphQL error:', err.response?.status, err.message);
+          return res.status(502).json({ error: 'Failed to reach LeetCode. Try again.' });
+        }
       }
 
       const timestamp = new Date().toISOString();
@@ -207,56 +215,31 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      // Query loop for paginated submissions
       const query = `
-        query submissionList($offset: Int!, $limit: Int!) {
-          submissionList(offset: $offset, limit: $limit) {
-            hasNext
-            submissions {
+        query userProfileUserQuestionProgressV2($userSlug: String!) {
+          userProfileUserQuestionProgressV2(userSlug: $userSlug) {
+            acceptedQuestionList {
               titleSlug
-              statusDisplay
             }
           }
         }
       `;
 
-      let offset = 0;
-      const limit = 50;
-      let hasNext = true;
       const solvedSlugs = new Set();
       
-      while (hasNext) {
-        let graphqlResp;
-        try {
-          graphqlResp = await axios.post('https://leetcode.com/graphql', {
-            query,
-            variables: { offset, limit, username }
-          }, {
-            headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
-            timeout: 10000
-          });
-        } catch (err) {
-          console.error("GraphQL Sync Pagination Error:", err.message);
-          break;
-        }
-
-        const data = graphqlResp.data?.data;
-        if (!data || graphqlResp.data?.errors) {
-          break;
-        }
-
-        const list = data.submissionList;
-        if (list && list.submissions) {
-          for (const sub of list.submissions) {
-            if (sub.statusDisplay === 'Accepted') {
-              solvedSlugs.add(sub.titleSlug);
-            }
-          }
-          hasNext = list.hasNext;
-          offset += limit;
-        } else {
-          hasNext = false;
-        }
+      try {
+        const resp = await axios.post('https://leetcode.com/graphql', {
+          query,
+          variables: { userSlug: username }
+        }, {
+          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
+          timeout: 10000
+        });
+        
+        const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
+        accepted.forEach(q => solvedSlugs.add(q.titleSlug));
+      } catch (err) {
+        console.error('GraphQL Sync Error:', err.message);
       }
 
       const timestamp = new Date().toISOString();
