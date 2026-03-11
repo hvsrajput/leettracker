@@ -395,16 +395,16 @@ export default function Problems() {
               />
             </div>
             <div className="form-group mt-2">
-              <label className="text-sm! text-gray-300!">LEETCODE_SESSION Cookie (Optional, bypasses 20 limit!)</label>
+              <label className="text-sm! text-gray-300!">Full "Cookie" Header (Optional, bypasses 20 limit!)</label>
               <input
                 type="password"
                 value={lcSessionCookie}
                 onChange={e => setLcSessionCookie(e.target.value)}
-                placeholder="Paste session cookie here"
+                placeholder="Paste the 'Cookie' header here"
                 disabled={isImporting}
                 onKeyDown={e => e.key === 'Enter' && handleImport()}
               />
-              <p className="text-xs text-gray-500 mt-1">To import ALL problems: Open LeetCode, F12 &gt; Application/Storage &gt; Cookies &gt; copy the value of LEETCODE_SESSION.</p>
+              <p className="text-xs text-gray-500 mt-1">To import ALL problems: Open LeetCode, F12 &gt; Network Tab &gt; Refresh &gt; Click any request &gt; scroll down to Request Headers and copy the ENTIRE "Cookie:" string value.</p>
             </div>
             {importError && <div className="auth-error mt-4">{importError}</div>}
             {importResult && <div className="text-green-500 mb-4 mt-4">{importResult}</div>}

@@ -89,8 +89,8 @@ export default function Groups() {
       )}
 
       {/* Create Group Modal */}
-      {showCreateModal && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowCreateModal(false)}>
+      {showCreate && (
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowCreate(false)}>
           <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Create New Group</h2>
             {error && <div className="auth-error">{error}</div>}

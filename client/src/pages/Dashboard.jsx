@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Heatmap from '../components/Heatmap';
 import './Dashboard.css';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [heatmapData, setHeatmapData] = useState({});
@@ -132,7 +134,7 @@ export default function Dashboard() {
           <h2 className="section-title">Group Progress</h2>
           <div className="group-stats-grid">
             {stats.groupStats.map(g => (
-              <div className="group-stat-card card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={g.id}>
+              <div className="group-stat-card card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={g.id} onClick={() => navigate(`/groups/${g.id}`)} style={{ cursor: 'pointer' }}>
                 <h3>{g.name}</h3>
                 <div className="group-stat-details">
                   <div className="gstat">

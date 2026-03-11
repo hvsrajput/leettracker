@@ -246,8 +246,38 @@ module.exports = function () {
         return res.status(404).json({ error: 'Problem not found' });
       }
 
+      // Delete the problem detail
       await deleteItem(`PROBLEM#${problemId}`, 'DETAIL');
       
+      // Clean up all PROGRESS# items for this problem across all users
+      const progressItems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROGRESS#', ':sk': `PROB#${problemId}` }
+      );
+      for (const pi of progressItems) {
+        await deleteItem(pi.PK, pi.SK);
+      }
+
+      // Clean up all GROUP# PROBLEM# entries referencing this problem
+      const groupProblemItems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'GROUP#', ':sk': `PROBLEM#${problemId}` }
+      );
+      for (const gp of groupProblemItems) {
+        await deleteItem(gp.PK, gp.SK);
+      }
+
+      // Clean up orphaned pattern if no other problems use it
+      if (existing.patternName) {
+        const remaining = await scanItems(
+          'begins_with(PK, :prefix) AND patternName = :pattern',
+          { ':prefix': 'PROBLEM#', ':pattern': existing.patternName }
+        );
+        if (remaining.length === 0) {
+          await deleteItem('PATTERN', `PAT#${existing.patternName}`);
+        }
+      }
+
       res.json({ success: true });
     } catch (err) {
       console.error('Delete problem error:', err);

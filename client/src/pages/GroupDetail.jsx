@@ -13,8 +13,13 @@ export default function GroupDetail() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [showAddProblem, setShowAddProblem] = useState(false);
   const [username, setUsername] = useState('');
-  const [lcNumber, setLcNumber] = useState('');
   const [error, setError] = useState('');
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const fetchGroup = () => {
     api.get(`/groups/${id}`)
@@ -38,14 +43,61 @@ export default function GroupDetail() {
     }
   };
 
+  let searchTimeout = null;
+
+  const handleSearch = async (query) => {
+    setSearchQuery(query);
+    setPreview(null);
+    setError('');
+    
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    searchTimeout = setTimeout(async () => {
+      try {
+        const res = await api.get(`/problems/search?q=${encodeURIComponent(query)}`);
+        setSearchResults(res.data);
+      } catch (err) {
+        console.error('Search error', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300); // 300ms debounce
+  };
+
+  const handleSelectProblem = (prob) => {
+    setPreview(prob);
+    setSearchQuery('');
+    setSearchResults([]);
+    setError('');
+  };
+
+  const resetProblemModal = () => {
+    setShowAddProblem(false);
+    setError('');
+    setPreview(null);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
   const handleAddProblem = async () => {
-    if (!lcNumber) return;
+    if (!preview) return;
     setError('');
     try {
       // First ensure the problem exists in the DB
       let problemRes;
       try {
-        problemRes = await api.post('/problems', { leetcode_number: parseInt(lcNumber) });
+        problemRes = await api.post('/problems', { 
+          leetcode_number: preview.number,
+          title: preview.title,
+          difficulty: preview.difficulty,
+          pattern_name: preview.topics?.[0] || null
+        });
       } catch (err) {
         // If problem already exists, get it from the list
         if (err.response?.data?.problem) {
@@ -57,8 +109,7 @@ export default function GroupDetail() {
       
       // Add problem to group
       await api.post(`/groups/${id}/problems`, { problem_id: problemRes.data.id });
-      setLcNumber('');
-      setShowAddProblem(false);
+      resetProblemModal();
       fetchGroup();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to add problem');
@@ -132,10 +183,11 @@ export default function GroupDetail() {
           </div>
           {group.problems.map((p, i) => (
             <div 
-              className={`problem-row ${p.solved ? 'solved' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30`}
+              className={`group-problem-row ${p.solved ? 'solved' : ''}`}
               key={p.leetcode_number}
               style={{ animationDelay: `${i * 0.03}s` }}
-            >  <span className="gcol-num">{p.leetcode_number}</span>
+            >
+              <span className="gcol-num">{p.leetcode_number}</span>
               <span className="gcol-title">
                 <a href={p.url} target="_blank" rel="noopener noreferrer" className="problem-link">
                   {p.title}
@@ -191,23 +243,56 @@ export default function GroupDetail() {
 
       {/* Add Problem Modal */}
       {showAddProblem && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => { setShowAddProblem(false); setError(''); }}>
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={resetProblemModal}>
           <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Add Problem to Group</h2>
-            {error && <div className="auth-error">{error}</div>}
-            <div className="form-group">
-              <label>LeetCode Problem Number</label>
-              <input
-                type="number"
-                value={lcNumber}
-                onChange={e => setLcNumber(e.target.value)}
-                placeholder="e.g. 1, 42, 200..."
-                onKeyDown={e => e.key === 'Enter' && handleAddProblem()}
-              />
+            <div className="form-group search-group">
+              <label>Search Problem (Title or Number)</label>
+              <div className="search-input-wrapper">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => handleSearch(e.target.value)}
+                  placeholder="e.g. Two Sum, 1..."
+                  autoComplete="off"
+                />
+                {isSearching && <span className="search-spinner">...</span>}
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {searchResults.map(res => (
+                    <div 
+                      key={res.number} 
+                      className="autocomplete-item"
+                      onClick={() => handleSelectProblem(res)}
+                    >
+                      <span className="ac-num">#{res.number}</span>
+                      <span className="ac-title">{res.title}</span>
+                      <span className={`ac-diff badge badge-${res.difficulty.toLowerCase()}`}>{res.difficulty}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
+            {error && <div className="auth-error">{error}</div>}
+
+            {preview && (
+              <div className="preview-card">
+                <div className="preview-title">{preview.title}</div>
+                <div className="preview-meta">
+                  <span className={`badge badge-${preview.difficulty.toLowerCase()}`}>{preview.difficulty}</span>
+                  {preview.topics && preview.topics.map(t => (
+                    <span className="badge badge-pattern" key={t}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowAddProblem(false); setError(''); }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleAddProblem}>Add Problem</button>
+              <button className="btn btn-secondary" onClick={resetProblemModal}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAddProblem} disabled={!preview}>Add Problem</button>
             </div>
           </div>
         </div>

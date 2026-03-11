@@ -74,7 +74,7 @@ export default function Heatmap({ data }) {
       <div className="heatmap-header">
         <div className="heatmap-months">
           {monthLabels.map((lbl, i) => (
-            <span key={i} style={{ left: `${lbl.x * 16}px` }}>
+            <span key={i} style={{ left: `${lbl.x * 13}px` }}>
               {lbl.label}
             </span>
           ))}
@@ -88,7 +88,7 @@ export default function Heatmap({ data }) {
           <span>Fri</span>
         </div>
         
-        <div className="heatmap-grid" style={{ gridTemplateColumns: `repeat(${WEEKS_TO_SHOW}, 1fr)` }}>
+        <div className="heatmap-grid">
           {calendarData.map((day, i) => (
             <div 
               key={i} 

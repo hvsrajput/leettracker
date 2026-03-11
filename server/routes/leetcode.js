@@ -27,14 +27,19 @@ module.exports = function () {
       if (sessionCookie) {
         // Authenticated REST API (Bypasses 20-item public limit)
         let offset = 0;
-        let limit = 100;
+        let limit = 20;
         let hasNext = true;
         
         while (hasNext) {
           try {
+            // Check if the user pasted the entire cookie string or just the session value
+            const cookieHeader = sessionCookie.includes('LEETCODE_SESSION=') 
+              ? sessionCookie 
+              : `LEETCODE_SESSION=${sessionCookie}`;
+
             const subResp = await axios.get(`https://leetcode.com/api/submissions/?offset=${offset}&limit=${limit}`, {
               headers: {
-                'Cookie': `LEETCODE_SESSION=${sessionCookie}`,
+                'Cookie': cookieHeader,
                 'Referer': 'https://leetcode.com'
               }
             });
@@ -61,7 +66,7 @@ module.exports = function () {
         // Public GraphQL API (Hardcapped to 20 AC submissions)
         const leetcodeQuery = `
           query getUserProfile($username: String!) {
-            recentAcSubmissionList(username: $username, limit: 50) {
+            recentAcSubmissionList(username: $username, limit: 500) {
               titleSlug
               timestamp
             }
@@ -137,7 +142,7 @@ module.exports = function () {
       // If we also want to utilize calendarMap for Heatmap, we could store it in a special item UserStats.
       // But currently Heatmap.jsx relies on the `/dashboard/heatmap` which derives from PROGRESS# items directly + grouped items!
       // To make the Heatmap truly reflect all history, we can insert dummy PROGRESS# items for the missing ones, or we just rely on what we have.
-      // Let's stick to importing the recent 100 AC submissions for now!
+      // Let's stick to importing the available AC submissions for now!
 
       res.json({ success: true, imported: importedCount });
     } catch (error) {
