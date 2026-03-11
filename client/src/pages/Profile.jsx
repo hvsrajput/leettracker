@@ -38,7 +38,11 @@ export default function Profile() {
     setMessage(null);
     try {
       const res = await api.post('/leetcode/sync');
-      setMessage({ type: 'success', text: `Sync successful! Imported ${res.data.imported} problems.` });
+      const { solved, attempted } = res.data;
+      let msg = `Sync successful! ${solved} solved`;
+      if (attempted) msg += `, ${attempted} attempted`;
+      msg += ' problems imported.';
+      setMessage({ type: 'success', text: msg });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to sync from LeetCode. Ensure your username is correct.' });
     } finally {
@@ -94,7 +98,7 @@ export default function Profile() {
             <div className="sync-section">
               <div className="divider"></div>
               <h3>Manual Sync</h3>
-              <p className="sync-desc">Fetch your latest 500 Accepted submissions from LeetCode.</p>
+              <p className="sync-desc">Fetch your latest solved and attempted submissions from LeetCode.</p>
               <button onClick={handleSync} className="btn-success" disabled={syncing}>
                 {syncing ? 'Syncing...' : 'Sync from LeetCode'}
               </button>

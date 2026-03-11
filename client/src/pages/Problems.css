@@ -149,6 +149,21 @@
   box-shadow: 0 0 8px rgba(0,184,148,0.3);
 }
 
+.check-btn.attempted {
+  border-color: var(--accent-orange);
+  color: var(--accent-orange);
+  font-size: 1.1rem;
+}
+
+.check-btn.attempted:hover {
+  background: rgba(255,165,0,0.1);
+}
+
+.problem-row.attempted {
+  background: rgba(255,165,0,0.04);
+  border-left: 2px solid var(--accent-orange);
+}
+
 /* Lookup */
 .lookup-row {
   display: flex;

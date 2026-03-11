@@ -58,6 +58,66 @@ async function fetchProblemFromLeetCode(titleSlug) {
   }
 }
 
+// Helper: ensure problem exists in DB, create if not
+async function ensureProblemExists(problemData, userId) {
+  const num = problemData.number;
+  const existingProb = await getItem(`PROBLEM#${num}`, 'DETAIL');
+  if (!existingProb) {
+    const patternName = problemData.topics?.[0] || 'Uncategorized';
+    
+    if (patternName) {
+      const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+      if (existingPattern.length === 0) {
+        await putItem({
+          PK: 'PATTERN',
+          SK: `PAT#${patternName}`,
+          name: patternName,
+          isDefault: 0,
+          createdBy: userId,
+        });
+      }
+    }
+
+    await putItem({
+      PK: `PROBLEM#${num}`,
+      SK: 'DETAIL',
+      leetcodeNumber: num,
+      title: problemData.title,
+      slug: problemData.slug,
+      difficulty: problemData.difficulty,
+      url: problemData.url || `https://leetcode.com/problems/${problemData.slug}/`,
+      patternName: patternName,
+      addedBy: userId,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
+
+// Helper: update progress with priority logic (solved > attempted > unsolved, never downgrade)
+async function updateProgress(userId, num, newStatus, timestamp) {
+  const existingProgress = await getItem(`PROGRESS#${userId}`, `PROB#${num}`);
+  const currentStatus = existingProgress?.status || (existingProgress?.solved === 1 ? 'solved' : 'unsolved');
+  
+  // Priority: solved > attempted > unsolved. Never downgrade.
+  const priority = { unsolved: 0, attempted: 1, solved: 2 };
+  if (priority[newStatus] <= priority[currentStatus]) {
+    return 'skipped'; // no change needed
+  }
+  
+  const solvedAt = newStatus === 'solved' ? timestamp : (existingProgress?.solvedAt || null);
+  
+  await putItem({
+    PK: `PROGRESS#${userId}`,
+    SK: `PROB#${num}`,
+    solved: newStatus === 'solved' ? 1 : 0,
+    status: newStatus,
+    solvedAt: solvedAt,
+    attemptedAt: newStatus === 'attempted' ? timestamp : (existingProgress?.attemptedAt || null),
+  });
+  
+  return newStatus === 'solved' ? 'solved' : 'attempted';
+}
+
 module.exports = function () {
   router.post('/import', auth, async (req, res) => {
     const { username, sessionCookie } = req.body;
@@ -66,7 +126,8 @@ module.exports = function () {
     }
 
     try {
-      let recentSubs = [];
+      // Build a map: slug -> { bestStatus, timestamp }
+      const submissionMap = new Map();
       
       if (sessionCookie) {
         // Authenticated REST API (Bypasses 20-item public limit)
@@ -74,18 +135,15 @@ module.exports = function () {
         let limit = 20;
         let hasNext = true;
         
-        // Build cookie header
         const cookieHeader = sessionCookie.includes('LEETCODE_SESSION=') 
           ? sessionCookie 
           : `LEETCODE_SESSION=${sessionCookie}`;
         
-        // Extract csrftoken if present in the cookie string
         let csrfToken = '';
         const csrfMatch = cookieHeader.match(/csrftoken=([^;\s]+)/);
         if (csrfMatch) {
           csrfToken = csrfMatch[1];
         } else {
-          // If no csrftoken in cookie, fetch one from leetcode.com first
           try {
             const csrfResp = await axios.get('https://leetcode.com', {
               headers: { 'Cookie': cookieHeader },
@@ -124,14 +182,20 @@ module.exports = function () {
             const dump = subResp.data.submissions_dump || [];
             
             for (const sub of dump) {
-              if (sub.status_display === 'Accepted') {
-                // Deduplicate by slug (keep first = most recent)
-                if (!recentSubs.find(s => s.titleSlug === sub.title_slug)) {
-                  recentSubs.push({
-                    titleSlug: sub.title_slug,
-                    timestamp: sub.timestamp
-                  });
-                }
+              const slug = sub.title_slug;
+              const isAccepted = sub.status_display === 'Accepted';
+              const existing = submissionMap.get(slug);
+              
+              // Solved always wins
+              if (!existing) {
+                submissionMap.set(slug, {
+                  titleSlug: slug,
+                  timestamp: sub.timestamp,
+                  status: isAccepted ? 'solved' : 'attempted'
+                });
+              } else if (isAccepted && existing.status !== 'solved') {
+                existing.status = 'solved';
+                existing.timestamp = sub.timestamp;
               }
             }
             
@@ -139,13 +203,13 @@ module.exports = function () {
             offset += limit;
           } catch (err) {
             console.error('REST API Submissions error:', err.message);
-            // Break loop on failure, but process what we got
             break; 
           }
         }
       } else {
-        // Public GraphQL API (Hardcapped to 20 AC submissions)
-        const leetcodeQuery = `
+        // Public GraphQL API — fetch BOTH AC and recent submissions
+        // 1. Fetch accepted submissions
+        const acQuery = `
           query getUserProfile($username: String!) {
             recentAcSubmissionList(username: $username, limit: 500) {
               titleSlug
@@ -153,31 +217,65 @@ module.exports = function () {
             }
           }
         `;
-        const lcResp = await axios.post('https://leetcode.com/graphql', {
-          query: leetcodeQuery,
+        const acResp = await axios.post('https://leetcode.com/graphql', {
+          query: acQuery,
           variables: { username }
         }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Referer': 'https://leetcode.com'
-          }
+          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
         });
         
-        recentSubs = lcResp.data?.data?.recentAcSubmissionList || [];
+        const acSubs = acResp.data?.data?.recentAcSubmissionList || [];
+        for (const sub of acSubs) {
+          submissionMap.set(sub.titleSlug, {
+            titleSlug: sub.titleSlug,
+            timestamp: sub.timestamp,
+            status: 'solved'
+          });
+        }
+        
+        // 2. Fetch recent submissions (all statuses) to find attempted
+        const recentQuery = `
+          query getRecentSubmissions($username: String!, $limit: Int!) {
+            recentSubmissionList(username: $username, limit: $limit) {
+              titleSlug
+              timestamp
+              statusDisplay
+            }
+          }
+        `;
+        const recentResp = await axios.post('https://leetcode.com/graphql', {
+          query: recentQuery,
+          variables: { username, limit: 500 }
+        }, {
+          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
+        });
+        
+        const recentSubs = recentResp.data?.data?.recentSubmissionList || [];
+        for (const sub of recentSubs) {
+          const existing = submissionMap.get(sub.titleSlug);
+          if (!existing) {
+            // Not in AC list → attempted
+            submissionMap.set(sub.titleSlug, {
+              titleSlug: sub.titleSlug,
+              timestamp: sub.timestamp,
+              status: sub.statusDisplay === 'Accepted' ? 'solved' : 'attempted'
+            });
+          }
+          // If already marked solved, don't downgrade
+        }
       }
 
-      let importedCount = 0;
+      let solvedCount = 0;
+      let attemptedCount = 0;
       let alreadyExistsCount = 0;
       let failedCount = 0;
 
-      for (const sub of recentSubs) {
+      for (const [slug, sub] of submissionMap) {
         try {
-          // Try local dataset first, then fetch from LeetCode API
-          let problemData = datasetMapBySlug.get(sub.titleSlug);
+          let problemData = datasetMapBySlug.get(slug);
           
           if (!problemData) {
-            // Fetch from LeetCode GraphQL API
-            problemData = await fetchProblemFromLeetCode(sub.titleSlug);
+            problemData = await fetchProblemFromLeetCode(slug);
             if (!problemData) {
               failedCount++;
               continue;
@@ -185,66 +283,27 @@ module.exports = function () {
           }
 
           const num = problemData.number;
-          const solvedAt = new Date(parseInt(sub.timestamp) * 1000).toISOString();
+          const ts = new Date(parseInt(sub.timestamp) * 1000).toISOString();
 
-          // Ensure problem exists
-          const existingProb = await getItem(`PROBLEM#${num}`, 'DETAIL');
-          if (!existingProb) {
-            const patternName = problemData.topics?.[0] || 'Uncategorized';
-            
-            // Dynamic pattern creation
-            if (patternName) {
-              const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
-              if (existingPattern.length === 0) {
-                await putItem({
-                  PK: 'PATTERN',
-                  SK: `PAT#${patternName}`,
-                  name: patternName,
-                  isDefault: 0,
-                  createdBy: req.userId,
-                });
-              }
-            }
-
-            await putItem({
-              PK: `PROBLEM#${num}`,
-              SK: 'DETAIL',
-              leetcodeNumber: num,
-              title: problemData.title,
-              slug: problemData.slug,
-              difficulty: problemData.difficulty,
-              url: problemData.url || `https://leetcode.com/problems/${problemData.slug}/`,
-              patternName: patternName,
-              addedBy: req.userId,
-              createdAt: new Date().toISOString(),
-            });
-          }
-
-          // Ensure progress exists
-          const existingProgress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
-          if (!existingProgress || existingProgress.solved === 0) {
-            await putItem({
-              PK: `PROGRESS#${req.userId}`,
-              SK: `PROB#${num}`,
-              solved: 1,
-              solvedAt: solvedAt,
-            });
-            importedCount++;
-          } else {
-            alreadyExistsCount++;
-          }
+          await ensureProblemExists(problemData, req.userId);
+          
+          const result = await updateProgress(req.userId, num, sub.status, ts);
+          if (result === 'solved') solvedCount++;
+          else if (result === 'attempted') attemptedCount++;
+          else alreadyExistsCount++;
         } catch (err) {
-          console.error(`Failed to import problem "${sub.titleSlug}":`, err.message);
+          console.error(`Failed to import problem "${slug}":`, err.message);
           failedCount++;
         }
       }
 
       res.json({ 
         success: true, 
-        imported: importedCount, 
+        solved: solvedCount,
+        attempted: attemptedCount,
         alreadyExists: alreadyExistsCount,
         failed: failedCount,
-        total: recentSubs.length
+        total: submissionMap.size
       });
     } catch (error) {
       console.error('LeetCode Import Error:', error);
@@ -262,7 +321,10 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      const leetcodeQuery = `
+      const submissionMap = new Map();
+
+      // 1. Fetch accepted submissions
+      const acQuery = `
         query getUserProfile($username: String!) {
           recentAcSubmissionList(username: $username, limit: 500) {
             titleSlug
@@ -270,73 +332,68 @@ module.exports = function () {
           }
         }
       `;
-      const lcResp = await axios.post('https://leetcode.com/graphql', {
-        query: leetcodeQuery,
+      const acResp = await axios.post('https://leetcode.com/graphql', {
+        query: acQuery,
         variables: { username }
       }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Referer': 'https://leetcode.com'
-        }
+        headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
       });
       
-      const recentSubs = lcResp.data?.data?.recentAcSubmissionList || [];
-
-      let importedCount = 0;
+      const acSubs = acResp.data?.data?.recentAcSubmissionList || [];
+      for (const sub of acSubs) {
+        submissionMap.set(sub.titleSlug, {
+          titleSlug: sub.titleSlug,
+          timestamp: sub.timestamp,
+          status: 'solved'
+        });
+      }
+      
+      // 2. Fetch recent submissions (all statuses) for attempted
+      const recentQuery = `
+        query getRecentSubmissions($username: String!, $limit: Int!) {
+          recentSubmissionList(username: $username, limit: $limit) {
+            titleSlug
+            timestamp
+            statusDisplay
+          }
+        }
+      `;
+      const recentResp = await axios.post('https://leetcode.com/graphql', {
+        query: recentQuery,
+        variables: { username, limit: 500 }
+      }, {
+        headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
+      });
+      
+      const recentSubs = recentResp.data?.data?.recentSubmissionList || [];
       for (const sub of recentSubs) {
-        const problemData = datasetMapBySlug.get(sub.titleSlug);
-        if (problemData) {
-          const num = problemData.number;
-          const solvedAt = new Date(parseInt(sub.timestamp) * 1000).toISOString();
-
-          // Ensure problem exists
-          const existingProb = await getItem(`PROBLEM#${num}`, 'DETAIL');
-          if (!existingProb) {
-            const patternName = problemData.topics?.[0] || 'Uncategorized';
-            
-            // Dynamic pattern creation
-            if (patternName) {
-              const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
-              if (existingPattern.length === 0) {
-                await putItem({
-                  PK: 'PATTERN',
-                  SK: `PAT#${patternName}`,
-                  name: patternName,
-                  isDefault: 0,
-                  createdBy: req.userId,
-                });
-              }
-            }
-
-            await putItem({
-              PK: `PROBLEM#${num}`,
-              SK: 'DETAIL',
-              leetcodeNumber: num,
-              title: problemData.title,
-              slug: problemData.slug,
-              difficulty: problemData.difficulty,
-              url: problemData.url,
-              patternName: patternName,
-              addedBy: req.userId,
-              createdAt: new Date().toISOString(),
-            });
-          }
-
-          // Ensure progress exists
-          const existingProgress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
-          if (!existingProgress || existingProgress.solved === 0) {
-            await putItem({
-              PK: `PROGRESS#${req.userId}`,
-              SK: `PROB#${num}`,
-              solved: 1,
-              solvedAt: solvedAt,
-            });
-            importedCount++;
-          }
+        const existing = submissionMap.get(sub.titleSlug);
+        if (!existing) {
+          submissionMap.set(sub.titleSlug, {
+            titleSlug: sub.titleSlug,
+            timestamp: sub.timestamp,
+            status: sub.statusDisplay === 'Accepted' ? 'solved' : 'attempted'
+          });
         }
       }
 
-      res.json({ success: true, imported: importedCount });
+      let solvedCount = 0;
+      let attemptedCount = 0;
+
+      for (const [slug, sub] of submissionMap) {
+        const problemData = datasetMapBySlug.get(slug);
+        if (problemData) {
+          const num = problemData.number;
+          const ts = new Date(parseInt(sub.timestamp) * 1000).toISOString();
+
+          await ensureProblemExists(problemData, req.userId);
+          const result = await updateProgress(req.userId, num, sub.status, ts);
+          if (result === 'solved') solvedCount++;
+          else if (result === 'attempted') attemptedCount++;
+        }
+      }
+
+      res.json({ success: true, solved: solvedCount, attempted: attemptedCount });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);
       res.status(500).json({ error: 'Failed to sync from LeetCode' });

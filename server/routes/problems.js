@@ -76,14 +76,17 @@ module.exports = function () {
       const progressMap = {};
       progressItems.forEach(p => {
         const lcNum = p.SK.replace('PROB#', '');
-        progressMap[lcNum] = p.solved;
+        // Backward compatible: derive status from solved field if status is missing
+        const status = p.status || (p.solved === 1 ? 'solved' : 'unsolved');
+        progressMap[lcNum] = { solved: p.solved, status };
       });
 
       // Attach solved status and companies from dataset
       let result = problems.map(p => {
         const datasetEntry = datasetMap.get(p.leetcodeNumber);
+        const progress = progressMap[String(p.leetcodeNumber)];
         return {
-          id: p.leetcodeNumber, // Use leetcode number as ID
+          id: p.leetcodeNumber,
           leetcode_number: p.leetcodeNumber,
           title: p.title,
           slug: p.slug,
@@ -92,16 +95,19 @@ module.exports = function () {
           pattern_name: p.patternName || null,
           added_by: p.addedBy,
           created_at: p.createdAt,
-          solved: progressMap[String(p.leetcodeNumber)] || 0,
+          solved: progress?.solved || 0,
+          status: progress?.status || 'unsolved',
           companies: datasetEntry ? (datasetEntry.companies || []) : []
         };
       });
 
-      // Filter by solved status
+      // Filter by solved/attempted/unsolved status
       if (solved === 'true') {
-        result = result.filter(p => p.solved === 1);
+        result = result.filter(p => p.status === 'solved');
       } else if (solved === 'false') {
-        result = result.filter(p => p.solved === 0 || !p.solved);
+        result = result.filter(p => p.status === 'unsolved');
+      } else if (solved === 'attempted') {
+        result = result.filter(p => p.status === 'attempted');
       }
 
       // Filter by company

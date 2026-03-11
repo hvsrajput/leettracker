@@ -18,19 +18,25 @@ module.exports = function () {
       const progressMap = {};
       progressItems.forEach(p => {
         const lcNum = p.SK.replace('PROB#', '');
-        progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt };
+        const status = p.status || (p.solved === 1 ? 'solved' : 'unsolved');
+        progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt, status };
       });
 
       const totalProblems = problems.length;
       let totalSolved = 0;
+      let totalAttempted = 0;
 
       // Pattern-wise and difficulty-wise breakdown
       const patternMap = {};
       const difficultyMap = {};
 
       problems.forEach(p => {
-        const isSolved = progressMap[String(p.leetcodeNumber)]?.solved === 1;
+        const progress = progressMap[String(p.leetcodeNumber)];
+        const status = progress?.status || 'unsolved';
+        const isSolved = status === 'solved';
+        const isAttempted = status === 'attempted';
         if (isSolved) totalSolved++;
+        if (isAttempted) totalAttempted++;
 
         // Pattern stats
         if (p.patternName) {
@@ -101,6 +107,7 @@ module.exports = function () {
 
       res.json({
         totalSolved,
+        totalAttempted,
         totalProblems,
         patternStats,
         difficultyStats,

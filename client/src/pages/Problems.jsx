@@ -148,8 +148,8 @@ export default function Problems() {
         username: lcUsername.trim(),
         sessionCookie: lcSessionCookie.trim()
       });
-      const { imported, alreadyExists, failed, total } = res.data;
-      let msg = `Found ${total} AC submissions. Imported ${imported} new.`;
+      const { solved, attempted, alreadyExists, failed, total } = res.data;
+      let msg = `Found ${total} submissions. ${solved} solved, ${attempted || 0} attempted imported.`;
       if (alreadyExists) msg += ` ${alreadyExists} already tracked.`;
       if (failed) msg += ` ${failed} couldn't be fetched.`;
       setImportResult(msg);
@@ -171,7 +171,7 @@ export default function Problems() {
         <div>
           <h1>Problems</h1>
           <p className="page-desc">
-            {solvedCount} of {problems.length} solved
+            {problems.filter(p => p.status === 'solved').length} solved, {problems.filter(p => p.status === 'attempted').length} attempted of {problems.length}
             {activePattern !== 'all' && ` in ${activePattern}`}
           </p>
         </div>
@@ -227,6 +227,7 @@ export default function Problems() {
         <select value={solvedFilter} onChange={e => setSolvedFilter(e.target.value)}>
           <option value="">All Status</option>
           <option value="true">Solved</option>
+          <option value="attempted">Attempted</option>
           <option value="false">Unsolved</option>
         </select>
         <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
@@ -267,17 +268,17 @@ export default function Problems() {
           </div>
           {problems.map((p, i) => (
             <div 
-              className={`problem-row ${p.solved ? 'solved' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30 cursor-pointer`} 
+              className={`problem-row ${p.status === 'solved' ? 'solved' : p.status === 'attempted' ? 'attempted' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30 cursor-pointer`} 
               key={p.id}
               style={{ animationDelay: `${i * 0.03}s` }}
             >
               <span className="col-check">
                 <button 
-                  className={`check-btn ${p.solved ? 'checked' : ''}`}
+                  className={`check-btn ${p.status === 'solved' ? 'checked' : p.status === 'attempted' ? 'attempted' : ''}`}
                   onClick={() => handleToggle(p.id)}
-                  title={p.solved ? 'Mark unsolved' : 'Mark solved'}
+                  title={p.status === 'solved' ? 'Mark unsolved' : 'Mark solved'}
                 >
-                  {p.solved ? '✓' : ''}
+                  {p.status === 'solved' ? '✓' : p.status === 'attempted' ? '•' : '○'}
                 </button>
               </span>
               <span className="col-num">{p.leetcode_number}</span>

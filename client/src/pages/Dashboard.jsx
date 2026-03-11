@@ -77,6 +77,16 @@ export default function Dashboard() {
           </div>
         </div>
 
+        <div className="stat-card stat-attempted transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-yellow-500/30">
+          <div className="stat-icon flex items-center justify-center">
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+          </div>
+          <div className="stat-info">
+            <span className="stat-number">{stats.totalAttempted || 0}</span>
+            <span className="stat-label">Attempted</span>
+          </div>
+        </div>
+
         {stats.difficultyStats && stats.difficultyStats.map(d => (
           <div className={`stat-card stat-${d.difficulty.toLowerCase()} transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30`} key={d.difficulty}>
             <div className="stat-icon flex items-center justify-center">
