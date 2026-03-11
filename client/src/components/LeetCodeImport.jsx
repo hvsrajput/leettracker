@@ -5,7 +5,6 @@ import api from '../api';
 const CONSOLE_SCRIPT = `(async () => {
   console.log('LeetTracker: Fetching all solved problems...');
 
-  // Step 1: REST API — returns ALL solved slugs, no cap, authenticated
   const apiResp = await fetch('/api/problems/all/', {
     headers: { 'Content-Type': 'application/json' }
   });
@@ -21,10 +20,8 @@ const CONSOLE_SCRIPT = `(async () => {
       .filter(p => p.status === 'ac')
       .map(p => p.stat.question__title_slug)
   );
-
   console.log(\`LeetTracker: Found \${allSlugs.size} solved problems.\`);
 
-  // Step 2: submissionList pagination — get timestamps
   const subQuery = \`query submissionList($offset: Int!, $limit: Int!) {
     submissionList(offset: $offset, limit: $limit) {
       hasNext submissions { titleSlug statusDisplay timestamp }
@@ -55,7 +52,6 @@ const CONSOLE_SCRIPT = `(async () => {
     if (hasNext) await new Promise(r => setTimeout(r, 400));
   }
 
-  // Step 3: Merge — all 36 slugs + best available timestamp
   const fallbackTs = Math.floor(Date.now() / 1000).toString();
   const solvedMap = {};
   for (const slug of allSlugs)
@@ -64,7 +60,6 @@ const CONSOLE_SCRIPT = `(async () => {
   const withDates = Object.values(solvedMap).filter(t => t !== fallbackTs).length;
   console.log(\`LeetTracker: \${withDates}/\${allSlugs.size} have exact dates. Rest use today as fallback.\`);
 
-  // Step 4: Copy to clipboard
   const el = document.createElement('textarea');
   el.value = JSON.stringify(solvedMap);
   document.body.appendChild(el);
@@ -72,7 +67,7 @@ const CONSOLE_SCRIPT = `(async () => {
   document.execCommand('copy');
   document.body.removeChild(el);
   console.log('LeetTracker: Copied to clipboard! Paste it in LeetTracker.');
-})();\`;
+})();`;
 
 export default function LeetCodeImport({ onSuccess, onCancel }) {
   const [step, setStep] = useState(1);
