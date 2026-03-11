@@ -14,12 +14,13 @@
 }
 
 .heatmap-months {
-  display: grid;
-  grid-template-columns: repeat(26, 1fr);
-  gap: 4px;
+  position: relative;
+  height: 20px;
 }
 
 .heatmap-months span {
+  position: absolute;
+  top: 0;
   font-size: 0.7rem;
 }
 

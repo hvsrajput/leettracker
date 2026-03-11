@@ -74,7 +74,7 @@ export default function Heatmap({ data }) {
       <div className="heatmap-header">
         <div className="heatmap-months">
           {monthLabels.map((lbl, i) => (
-            <span key={i} style={{ gridColumn: lbl.x + 1 }}>
+            <span key={i} style={{ left: `${lbl.x * 16}px` }}>
               {lbl.label}
             </span>
           ))}

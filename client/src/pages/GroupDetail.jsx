@@ -110,7 +110,11 @@ export default function GroupDetail() {
       {/* Group Problem Table */}
       {group.problems?.length === 0 ? (
         <div className="empty-state">
-          <span className="empty-icon">📝</span>
+          <span className="empty-icon text-gray-400">
+            <svg className="w-12 h-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+          </span>
           <h3>No problems in this group</h3>
           <p>Add problems by their LeetCode number!</p>
         </div>
@@ -127,8 +131,11 @@ export default function GroupDetail() {
             ))}
           </div>
           {group.problems.map((p, i) => (
-            <div className="group-problem-row" key={p.id} style={{ animationDelay: `${i * 0.03}s` }}>
-              <span className="gcol-num">{p.leetcode_number}</span>
+            <div 
+              className={`problem-row ${p.solved ? 'solved' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30`}
+              key={p.leetcode_number}
+              style={{ animationDelay: `${i * 0.03}s` }}
+            >  <span className="gcol-num">{p.leetcode_number}</span>
               <span className="gcol-title">
                 <a href={p.url} target="_blank" rel="noopener noreferrer" className="problem-link">
                   {p.title}
@@ -184,8 +191,8 @@ export default function GroupDetail() {
 
       {/* Add Problem Modal */}
       {showAddProblem && (
-        <div className="modal-overlay" onClick={() => { setShowAddProblem(false); setError(''); }}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => { setShowAddProblem(false); setError(''); }}>
+          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Add Problem to Group</h2>
             {error && <div className="auth-error">{error}</div>}
             <div className="form-group">

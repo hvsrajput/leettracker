@@ -17,6 +17,7 @@ app.use('/api/patterns', require('./routes/patterns')());
 app.use('/api/problems', require('./routes/problems')());
 app.use('/api/groups', require('./routes/groups')());
 app.use('/api/dashboard', require('./routes/dashboard')());
+app.use('/api/leetcode', require('./routes/leetcode')());
 
 // Health check
 app.get('/api/health', (req, res) => {

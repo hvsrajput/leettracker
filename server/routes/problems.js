@@ -84,6 +84,7 @@ module.exports = function () {
         id: p.leetcodeNumber, // Use leetcode number as ID
         leetcode_number: p.leetcodeNumber,
         title: p.title,
+        slug: p.slug,
         difficulty: p.difficulty,
         url: p.url,
         pattern_name: p.patternName || null,
@@ -138,7 +139,8 @@ module.exports = function () {
       const data = datasetMap.get(num);
       const title = data ? data.title : (manualTitle || `Problem ${num}`);
       const difficulty = data ? data.difficulty : (manualDiff || 'Medium');
-      const url = data ? data.url : (manualUrl || `https://leetcode.com/problems/problem-${num}/`);
+      const slug = data ? data.slug : (manualTitle ? manualTitle.toLowerCase().replace(/\\s+/g, '-') : `problem-${num}`);
+      const url = data ? data.url : (manualUrl || `https://leetcode.com/problems/${slug}/`);
 
       // Determine pattern name
       let patternName = null;
@@ -155,6 +157,7 @@ module.exports = function () {
         SK: 'DETAIL',
         leetcodeNumber: num,
         title,
+        slug,
         difficulty,
         url,
         patternName,
@@ -166,6 +169,7 @@ module.exports = function () {
         id: num,
         leetcode_number: num,
         title,
+        slug,
         difficulty,
         url,
         pattern_name: patternName,

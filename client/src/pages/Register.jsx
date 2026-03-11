@@ -30,7 +30,11 @@ export default function Register() {
     <div className="auth-page">
       <div className="auth-container animate-slide-up">
         <div className="auth-header">
-          <span className="auth-brand-icon">⚡</span>
+          <span className="auth-brand-icon text-yellow-400">
+            <svg className="w-8 h-8 mx-auto" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
+            </svg>
+          </span>
           <h1 className="auth-brand">LeetTracker</h1>
           <p className="auth-subtitle">Start tracking your progress</p>
         </div>

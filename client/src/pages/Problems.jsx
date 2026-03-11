@@ -18,6 +18,13 @@ export default function Problems() {
   const [addError, setAddError] = useState('');
   const [newPatternName, setNewPatternName] = useState('');
 
+  // LeetCode Import State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [lcUsername, setLcUsername] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState('');
+  const [importError, setImportError] = useState('');
+
   const fetchProblems = () => {
     const params = new URLSearchParams();
     if (activePattern !== 'all') params.append('pattern', activePattern);
@@ -115,6 +122,23 @@ export default function Problems() {
     }
   };
 
+  const handleImport = async () => {
+    if (!lcUsername.trim()) return;
+    setIsImporting(true);
+    setImportError('');
+    setImportResult('');
+    try {
+      const res = await api.post('/leetcode/import', { username: lcUsername.trim() });
+      setImportResult(`Successfully imported ${res.data.imported} new solutions!`);
+      setLcUsername('');
+      fetchProblems(); // Refresh the grid
+    } catch (err) {
+      setImportError(err.response?.data?.error || 'Failed to import from LeetCode');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const solvedCount = problems.filter(p => p.solved).length;
 
   return (
@@ -127,9 +151,17 @@ export default function Problems() {
             {activePattern !== 'all' && ` in ${activePattern}`}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          + Add Problem
-        </button>
+        <div className="flex gap-4">
+          <button className="btn btn-secondary flex items-center gap-2" onClick={() => setShowImportModal(true)}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Import from LeetCode
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            + Add Problem
+          </button>
+        </div>
       </div>
 
       {/* Pattern Tabs */}
@@ -180,7 +212,11 @@ export default function Problems() {
         <div className="page-loading">Loading problems...</div>
       ) : problems.length === 0 ? (
         <div className="empty-state">
-          <span className="empty-icon">📝</span>
+          <span className="empty-icon text-gray-400">
+            <svg className="w-12 h-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+            </svg>
+          </span>
           <h3>No problems yet</h3>
           <p>Add your first problem to start tracking!</p>
         </div>
@@ -195,7 +231,7 @@ export default function Problems() {
           </div>
           {problems.map((p, i) => (
             <div 
-              className={`problem-row ${p.solved ? 'solved' : ''}`} 
+              className={`problem-row ${p.solved ? 'solved' : ''} transition-all duration-300 hover:scale-[1.01] hover:ring-1 hover:ring-green-500/30 cursor-pointer`} 
               key={p.id}
               style={{ animationDelay: `${i * 0.03}s` }}
             >
@@ -229,8 +265,8 @@ export default function Problems() {
 
       {/* Add Problem Modal */}
       {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowAddModal(false)}>
+          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Add Problem</h2>
             <div className="form-group search-group">
               <label>Search Problem (Title or Number)</label>
@@ -290,8 +326,8 @@ export default function Problems() {
 
       {/* Add Pattern Modal */}
       {showPatternModal && (
-        <div className="modal-overlay" onClick={() => setShowPatternModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => setShowPatternModal(false)}>
+          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Add Custom Pattern</h2>
             <div className="form-group">
               <label>Pattern Name</label>
@@ -306,6 +342,47 @@ export default function Problems() {
             <div className="form-actions">
               <button className="btn btn-secondary" onClick={() => setShowPatternModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleAddPattern}>Add Pattern</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => !isImporting && setShowImportModal(false)}>
+          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
+            <h2>Import from LeetCode</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Enter your LeetCode username to automatically import your mostly recently accepted submissions and update your tracker.
+            </p>
+            <div className="form-group">
+              <label>LeetCode Username</label>
+              <input
+                type="text"
+                value={lcUsername}
+                onChange={e => setLcUsername(e.target.value)}
+                placeholder="e.g. hvsrajput"
+                disabled={isImporting}
+                onKeyDown={e => e.key === 'Enter' && handleImport()}
+              />
+            </div>
+            {importError && <div className="auth-error">{importError}</div>}
+            {importResult && <div className="text-green-500 mb-4">{importResult}</div>}
+            <div className="form-actions mt-4">
+              <button className="btn btn-secondary" onClick={() => setShowImportModal(false)} disabled={isImporting}>
+                Close
+              </button>
+              <button className="btn btn-primary flex items-center justify-center gap-2" onClick={handleImport} disabled={isImporting || !lcUsername.trim()}>
+                {isImporting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Importing...
+                  </>
+                ) : 'Import'}
+              </button>
             </div>
           </div>
         </div>

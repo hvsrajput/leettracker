@@ -64,9 +64,9 @@ export default function Dashboard() {
         </div>
 
         {stats.difficultyStats && stats.difficultyStats.map(d => (
-          <div className={`stat-card stat-${d.difficulty.toLowerCase()}`} key={d.difficulty}>
-            <div className="stat-icon">
-              {d.difficulty === 'Easy' ? '🟢' : d.difficulty === 'Medium' ? '🟡' : '🔴'}
+          <div className={`stat-card stat-${d.difficulty.toLowerCase()} transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30`} key={d.difficulty}>
+            <div className="stat-icon flex items-center justify-center">
+              <div className={`w-3 h-3 rounded-full ${d.difficulty === 'Easy' ? 'bg-green-500' : d.difficulty === 'Medium' ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
             </div>
             <div className="stat-info">
               <span className="stat-number">{d.solved}/{d.total}</span>
@@ -111,7 +111,7 @@ export default function Dashboard() {
         <h2 className="section-title">Pattern Progress</h2>
         <div className="pattern-grid">
           {stats.patternStats && stats.patternStats.map(p => (
-            <div className="pattern-card" key={p.name}>
+            <div className="pattern-card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={p.name}>
               <div className="pattern-header">
                 <span className="pattern-name">{p.name}</span>
                 <span className="pattern-count">{p.solved}/{p.total}</span>
@@ -132,7 +132,7 @@ export default function Dashboard() {
           <h2 className="section-title">Group Progress</h2>
           <div className="group-stats-grid">
             {stats.groupStats.map(g => (
-              <div className="group-stat-card card" key={g.id}>
+              <div className="group-stat-card card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={g.id}>
                 <h3>{g.name}</h3>
                 <div className="group-stat-details">
                   <div className="gstat">
@@ -160,8 +160,12 @@ export default function Dashboard() {
           <h2 className="section-title">Recently Solved</h2>
           <div className="recent-list">
             {stats.recentSolved.map((p, i) => (
-              <div className="recent-item" key={i}>
-                <span className="recent-check">✅</span>
+              <div className="recent-item transition-all duration-300 hover:scale-[1.01] hover:bg-gray-800/50 cursor-pointer" key={i}>
+                <span className="recent-check text-green-500">
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                  </svg>
+                </span>
                 <span className="recent-num">#{p.leetcode_number}</span>
                 <span className="recent-title">{p.title}</span>
                 <span className={`badge badge-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>

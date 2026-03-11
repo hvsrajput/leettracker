@@ -33,3 +33,4 @@ npm-debug.log*
 coverage/
 .vercel
 .env*.local
+server/lambda-deploy.zip
