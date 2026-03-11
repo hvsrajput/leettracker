@@ -3,38 +3,35 @@ import axios from 'axios';
 import api from '../api';
 
 const CONSOLE_SCRIPT = `(async () => {
-  // ── Query 1: Get ALL solved slugs (to bypass submission history cap) ──
-  const profileQuery = \`query userProfileUserQuestionProgressV2($userSlug: String!) {
-    userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-      acceptedQuestionList { titleSlug }
-    }
-  }\`;
-
-  const meQuery = \`query { userStatus { username } }\`;
   const meResp = await fetch('/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: meQuery })
+    body: JSON.stringify({ query: 'query { userStatus { username } }' })
   });
   const meJson = await meResp.json();
   const username = meJson?.data?.userStatus?.username;
-
-  if (!username) {
-    console.error('LeetTracker: Could not detect username. Are you logged in?');
-    return;
-  }
-  console.log(\`LeetTracker: Detected username: \${username}\`);
+  if (!username) { console.error('LeetTracker: Not logged in.'); return; }
+  console.log('LeetTracker: Detected user:', username);
 
   const profileResp = await fetch('/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: profileQuery, variables: { userSlug: username } })
+    body: JSON.stringify({
+      query: \`query userProfileUserQuestionProgressV2($userSlug: String!) {
+        userProfileUserQuestionProgressV2(userSlug: $userSlug) {
+          acceptedQuestionList { titleSlug }
+        }
+      }\`,
+      variables: { userSlug: username }
+    })
   });
   const profileJson = await profileResp.json();
-  const allSlugs = new Set(profileJson?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList?.map(q => q.titleSlug) || []);
-  console.log(\`LeetTracker: Found \${allSlugs.size} total solved problems.\`);
+  const allSlugs = new Set(
+    (profileJson?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [])
+    .map(q => q.titleSlug)
+  );
+  console.log(\`LeetTracker: \${allSlugs.size} total solved problems found.\`);
 
-  // ── Query 2: Get absolute timestamps via paginated submissionList ──
   const subQuery = \`query submissionList($offset: Int!, $limit: Int!) {
     submissionList(offset: $offset, limit: $limit) {
       hasNext submissions { titleSlug statusDisplay timestamp }
@@ -43,9 +40,8 @@ const CONSOLE_SCRIPT = `(async () => {
 
   const dateMap = {};
   let offset = 0, hasNext = true, page = 1;
-
   while (hasNext) {
-    console.log(\`LeetTracker: Fetching submission dates page \${page}...\`);
+    console.log(\`LeetTracker: Fetching dates page \${page}...\`);
     const resp = await fetch('/graphql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -54,33 +50,31 @@ const CONSOLE_SCRIPT = `(async () => {
     const json = await resp.json();
     const list = json?.data?.submissionList;
     if (!list) break;
-
     for (const sub of list.submissions)
       if (sub.statusDisplay === 'Accepted' && !dateMap[sub.titleSlug])
         dateMap[sub.titleSlug] = sub.timestamp;
-
     hasNext = list.hasNext;
     offset += 50;
     page++;
     if (hasNext) await new Promise(r => setTimeout(r, 400));
   }
 
-  // ── Merge: full slug list + best available timestamp ──
   const fallbackTs = Math.floor(Date.now() / 1000).toString();
   const solvedMap = {};
-  for (const slug of allSlugs) {
+  for (const slug of allSlugs)
     solvedMap[slug] = dateMap[slug] || fallbackTs;
-  }
 
-  // ── Robust Copy to Clipboard ──
+  const withDates = Object.values(solvedMap).filter(t => t !== fallbackTs).length;
+  console.log(\`LeetTracker: \${withDates}/\${allSlugs.size} have exact dates. Rest use today.\`);
+
   const el = document.createElement('textarea');
   el.value = JSON.stringify(solvedMap);
   document.body.appendChild(el);
   el.select();
   document.execCommand('copy');
   document.body.removeChild(el);
-  console.log('LeetTracker: Data copied to clipboard! Go paste it in LeetTracker.');
-})();\`;
+  console.log('LeetTracker: Copied to clipboard! Paste it in LeetTracker.');
+})();`;
 
 export default function LeetCodeImport({ onSuccess, onCancel }) {
   const [step, setStep] = useState(1);
