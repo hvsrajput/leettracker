@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET, auth } = require('../middleware/auth');
-const { putItem, getItem } = require('../db/dynamodb');
+const { putItem, getItem, updateItem } = require('../db/dynamodb');
 
 const router = express.Router();
 
@@ -70,7 +70,7 @@ module.exports = function () {
       }
 
       const token = jwt.sign({ id: email, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
-      res.json({ token, user: { id: email, username: user.username, email: user.email } });
+      res.json({ token, user: { id: email, username: user.username, email: user.email, leetcodeUsername: user.leetcodeUsername } });
     } catch (err) {
       console.error('Login error:', err);
       res.status(500).json({ error: 'Login failed' });
@@ -86,11 +86,41 @@ module.exports = function () {
         id: user.email,
         username: user.username,
         email: user.email,
+        leetcodeUsername: user.leetcodeUsername,
         created_at: user.createdAt,
       });
     } catch (err) {
       console.error('Get user error:', err);
       res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
+  // Update LeetCode username
+  router.put('/me/leetcode-username', auth, async (req, res) => {
+    try {
+      const { leetcodeUsername } = req.body;
+      const user = await getItem(`USER#${req.userId}`, 'PROFILE');
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      
+      if (leetcodeUsername) {
+        await updateItem(
+          `USER#${req.userId}`,
+          'PROFILE',
+          'SET leetcodeUsername = :lc',
+          { ':lc': leetcodeUsername }
+        );
+      } else {
+        await updateItem(
+          `USER#${req.userId}`,
+          'PROFILE',
+          'REMOVE leetcodeUsername'
+        );
+      }
+      
+      res.json({ success: true, leetcodeUsername });
+    } catch (err) {
+      console.error('Update leetcode username error:', err);
+      res.status(500).json({ error: 'Failed to update LeetCode username' });
     }
   });
 

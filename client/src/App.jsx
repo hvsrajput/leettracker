@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Problems from './pages/Problems';
 import Groups from './pages/Groups';
 import GroupDetail from './pages/GroupDetail';
+import Profile from './pages/Profile';
 
 function App() {
   return (
@@ -28,6 +29,9 @@ function App() {
           } />
           <Route path="/groups/:id" element={
             <ProtectedRoute><GroupDetail /></ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute><Profile /></ProtectedRoute>
           } />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

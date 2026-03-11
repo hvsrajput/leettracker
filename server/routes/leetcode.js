@@ -252,5 +252,96 @@ module.exports = function () {
     }
   });
 
+  router.post('/sync', auth, async (req, res) => {
+    try {
+      const user = await getItem(`USER#${req.userId}`, 'PROFILE');
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      
+      const username = user.leetcodeUsername;
+      if (!username) {
+        return res.status(400).json({ error: 'LeetCode username not set in profile' });
+      }
+
+      const leetcodeQuery = `
+        query getUserProfile($username: String!) {
+          recentAcSubmissionList(username: $username, limit: 500) {
+            titleSlug
+            timestamp
+          }
+        }
+      `;
+      const lcResp = await axios.post('https://leetcode.com/graphql', {
+        query: leetcodeQuery,
+        variables: { username }
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Referer': 'https://leetcode.com'
+        }
+      });
+      
+      const recentSubs = lcResp.data?.data?.recentAcSubmissionList || [];
+
+      let importedCount = 0;
+      for (const sub of recentSubs) {
+        const problemData = datasetMapBySlug.get(sub.titleSlug);
+        if (problemData) {
+          const num = problemData.number;
+          const solvedAt = new Date(parseInt(sub.timestamp) * 1000).toISOString();
+
+          // Ensure problem exists
+          const existingProb = await getItem(`PROBLEM#${num}`, 'DETAIL');
+          if (!existingProb) {
+            const patternName = problemData.topics?.[0] || 'Uncategorized';
+            
+            // Dynamic pattern creation
+            if (patternName) {
+              const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+              if (existingPattern.length === 0) {
+                await putItem({
+                  PK: 'PATTERN',
+                  SK: `PAT#${patternName}`,
+                  name: patternName,
+                  isDefault: 0,
+                  createdBy: req.userId,
+                });
+              }
+            }
+
+            await putItem({
+              PK: `PROBLEM#${num}`,
+              SK: 'DETAIL',
+              leetcodeNumber: num,
+              title: problemData.title,
+              slug: problemData.slug,
+              difficulty: problemData.difficulty,
+              url: problemData.url,
+              patternName: patternName,
+              addedBy: req.userId,
+              createdAt: new Date().toISOString(),
+            });
+          }
+
+          // Ensure progress exists
+          const existingProgress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
+          if (!existingProgress || existingProgress.solved === 0) {
+            await putItem({
+              PK: `PROGRESS#${req.userId}`,
+              SK: `PROB#${num}`,
+              solved: 1,
+              solvedAt: solvedAt,
+            });
+            importedCount++;
+          }
+        }
+      }
+
+      res.json({ success: true, imported: importedCount });
+    } catch (error) {
+      console.error('LeetCode Sync Error:', error);
+      res.status(500).json({ error: 'Failed to sync from LeetCode' });
+    }
+  });
+
   return router;
 };
