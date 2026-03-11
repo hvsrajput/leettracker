@@ -9,6 +9,7 @@ export default function Problems() {
   const [activePattern, setActivePattern] = useState('all');
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [solvedFilter, setSolvedFilter] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPatternModal, setShowPatternModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +32,7 @@ export default function Problems() {
     if (activePattern !== 'all') params.append('pattern', activePattern);
     if (difficultyFilter) params.append('difficulty', difficultyFilter);
     if (solvedFilter) params.append('solved', solvedFilter);
+    if (companyFilter) params.append('company', companyFilter);
 
     api.get(`/problems?${params.toString()}`)
       .then(res => setProblems(res.data))
@@ -45,7 +47,7 @@ export default function Problems() {
   useEffect(() => {
     setLoading(true);
     fetchProblems();
-  }, [activePattern, difficultyFilter, solvedFilter]);
+  }, [activePattern, difficultyFilter, solvedFilter, companyFilter]);
 
   let searchTimeout = null;
 
@@ -227,6 +229,17 @@ export default function Problems() {
           <option value="true">Solved</option>
           <option value="false">Unsolved</option>
         </select>
+        <select value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}>
+          <option value="">All Companies</option>
+          <option value="Amazon">Amazon</option>
+          <option value="Google">Google</option>
+          <option value="Meta">Meta</option>
+          <option value="Microsoft">Microsoft</option>
+          <option value="Apple">Apple</option>
+          <option value="Uber">Uber</option>
+          <option value="Adobe">Adobe</option>
+          <option value="Netflix">Netflix</option>
+        </select>
       </div>
 
       {/* Problem List */}
@@ -276,9 +289,12 @@ export default function Problems() {
               <span className="col-diff">
                 <span className={`badge badge-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
               </span>
-              <span className="col-pattern">
+              <span className="col-pattern flex gap-1 flex-wrap">
                 {p.pattern_name && (
                   <span className="badge badge-pattern">{p.pattern_name}</span>
+                )}
+                {p.companies && p.companies.length > 0 && (
+                  <span className="badge badge-pattern text-xs opacity-75">{p.companies[0]}</span>
                 )}
               </span>
               <span className="col-action flex justify-center items-center">

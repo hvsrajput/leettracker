@@ -12,11 +12,23 @@ export default function Dashboard() {
   const [heatmapLoading, setHeatmapLoading] = useState(true);
   const [heatmapGroup, setHeatmapGroup] = useState('me'); // 'me' or groupId
 
+  // New states for Smart Pattern Heatmap & Company Preparation
+  const [patternHeatmap, setPatternHeatmap] = useState(null);
+  const [companyProgress, setCompanyProgress] = useState(null);
+
   useEffect(() => {
-    api.get('/dashboard')
-      .then(res => setStats(res.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get('/dashboard'),
+      api.get('/dashboard/pattern-heatmap/me'),
+      api.get('/dashboard/company-progress/me')
+    ])
+    .then(([dashRes, patternRes, companyRes]) => {
+      setStats(dashRes.data);
+      setPatternHeatmap(patternRes.data);
+      setCompanyProgress(companyRes.data);
+    })
+    .catch(console.error)
+    .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -108,25 +120,90 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Pattern Progress */}
-      <div className="dashboard-section">
-        <h2 className="section-title">Pattern Progress</h2>
-        <div className="pattern-grid">
-          {stats.patternStats && stats.patternStats.map(p => (
-            <div className="pattern-card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={p.name}>
-              <div className="pattern-header">
-                <span className="pattern-name">{p.name}</span>
-                <span className="pattern-count">{p.solved}/{p.total}</span>
+      {/* Smart Pattern Insights */}
+      {patternHeatmap && (
+        <div className="dashboard-section">
+          <h2 className="section-title">Smart Pattern Insights</h2>
+          
+          <div className="insights-grid">
+            {patternHeatmap.strongest && (
+              <div className="insight-card strongest">
+                <div className="insight-header">
+                  <span className="insight-icon">🔥</span>
+                  <span className="insight-label">Strongest Pattern</span>
+                </div>
+                <div className="insight-value">{patternHeatmap.strongest.pattern}</div>
+                <div className="insight-percent text-green-500">{patternHeatmap.strongest.percent}% completion</div>
               </div>
-              <div className="pattern-bar">
-                <div className="pattern-bar-fill" style={{ 
-                  width: `${p.total > 0 ? (p.solved / p.total) * 100 : 0}%` 
-                }}/>
+            )}
+            
+            {patternHeatmap.weakest && (
+              <div className="insight-card weakest">
+                <div className="insight-header">
+                  <span className="insight-icon">⚠️</span>
+                  <span className="insight-label">Weakest Pattern</span>
+                </div>
+                <div className="insight-value">{patternHeatmap.weakest.pattern}</div>
+                <div className="insight-percent text-yellow-500">{patternHeatmap.weakest.percent}% completion</div>
               </div>
-            </div>
-          ))}
+            )}
+
+            {patternHeatmap.neglected && (
+              <div className="insight-card neglected">
+                <div className="insight-header">
+                  <span className="insight-icon">🕸️</span>
+                  <span className="insight-label">Neglected Pattern</span>
+                </div>
+                <div className="insight-value">{patternHeatmap.neglected.pattern}</div>
+                <div className="insight-percent text-gray-500">{patternHeatmap.neglected.percent}% completion</div>
+              </div>
+            )}
+          </div>
+
+          <div className="pattern-grid mt-6">
+            {patternHeatmap.allPatterns.map(p => (
+              <div className="pattern-card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={p.pattern}>
+                <div className="pattern-header">
+                  <span className="pattern-name">{p.pattern}</span>
+                  <span className="pattern-count">{p.solved}/{p.total}</span>
+                </div>
+                <div className="pattern-bar">
+                  <div className="pattern-bar-fill" style={{ 
+                    width: `${p.total > 0 ? (p.solved / p.total) * 100 : 0}%`,
+                    background: p.percent >= 80 ? 'var(--accent-green)' : p.percent >= 50 ? 'var(--accent-blue)' : 'var(--accent-orange)'
+                  }}/>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Company Preparation */}
+      {companyProgress && companyProgress.length > 0 && (
+        <div className="dashboard-section">
+          <h2 className="section-title">Company Preparation</h2>
+          <div className="company-grid">
+            {companyProgress.slice(0, 10).map(c => (
+              <div className="company-card transition-transform duration-300 hover:scale-[1.02] hover:ring-1 hover:ring-green-500/30" key={c.company}>
+                <div className="company-header">
+                  <span className="company-name">{c.company}</span>
+                  <span className="company-percent font-bold">{c.percent}%</span>
+                </div>
+                <div className="company-stats text-sm text-gray-400 mb-2">
+                  {c.solved} / {c.total} solved
+                </div>
+                <div className="company-bar w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div className="company-bar-fill h-full" style={{ 
+                    width: `${c.percent}%`,
+                    background: c.percent >= 80 ? 'var(--accent-green)' : c.percent >= 40 ? 'var(--accent-blue)' : 'var(--accent-purple)'
+                  }}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Group Progress */}
       {stats.groupStats && stats.groupStats.length > 0 && (

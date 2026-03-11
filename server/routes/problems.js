@@ -55,7 +55,7 @@ module.exports = function () {
   // Get problems with filters
   router.get('/', auth, async (req, res) => {
     try {
-      const { pattern, difficulty, solved } = req.query;
+      const { pattern, difficulty, solved, company } = req.query;
 
       // Get all problems
       let problems = await scanItems(
@@ -79,25 +79,34 @@ module.exports = function () {
         progressMap[lcNum] = p.solved;
       });
 
-      // Attach solved status
-      let result = problems.map(p => ({
-        id: p.leetcodeNumber, // Use leetcode number as ID
-        leetcode_number: p.leetcodeNumber,
-        title: p.title,
-        slug: p.slug,
-        difficulty: p.difficulty,
-        url: p.url,
-        pattern_name: p.patternName || null,
-        added_by: p.addedBy,
-        created_at: p.createdAt,
-        solved: progressMap[String(p.leetcodeNumber)] || 0,
-      }));
+      // Attach solved status and companies from dataset
+      let result = problems.map(p => {
+        const datasetEntry = datasetMap.get(p.leetcodeNumber);
+        return {
+          id: p.leetcodeNumber, // Use leetcode number as ID
+          leetcode_number: p.leetcodeNumber,
+          title: p.title,
+          slug: p.slug,
+          difficulty: p.difficulty,
+          url: p.url,
+          pattern_name: p.patternName || null,
+          added_by: p.addedBy,
+          created_at: p.createdAt,
+          solved: progressMap[String(p.leetcodeNumber)] || 0,
+          companies: datasetEntry ? (datasetEntry.companies || []) : []
+        };
+      });
 
       // Filter by solved status
       if (solved === 'true') {
         result = result.filter(p => p.solved === 1);
       } else if (solved === 'false') {
         result = result.filter(p => p.solved === 0 || !p.solved);
+      }
+
+      // Filter by company
+      if (company && company !== 'all') {
+        result = result.filter(p => p.companies.includes(company));
       }
 
       // Sort by leetcode number
