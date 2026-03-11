@@ -130,8 +130,25 @@ module.exports = function () {
       const submissionMap = new Map();
       
       if (sessionCookie) {
-      // Query loop for paginated submissions
-      const query = `
+        const cookieHeader = sessionCookie.includes('LEETCODE_SESSION=')
+          ? sessionCookie
+          : `LEETCODE_SESSION=${sessionCookie}`;
+
+        // Extract csrftoken from the cookie string
+        let csrfToken = '';
+        const csrfMatch = cookieHeader.match(/csrftoken=([^;\s]+)/);
+        if (csrfMatch) csrfToken = csrfMatch[1];
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Cookie': cookieHeader,
+          'Referer': 'https://leetcode.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          ...(csrfToken && { 'x-csrftoken': csrfToken }),
+        };
+
+        // Query loop for paginated submissions
+        const query = `
         query submissionList($offset: Int!, $limit: Int!) {
           submissionList(offset: $offset, limit: $limit) {
             hasNext
@@ -183,6 +200,10 @@ module.exports = function () {
           }
           hasNext = list.hasNext;
           offset += limit;
+          
+          if (hasNext) {
+            await new Promise(r => setTimeout(r, 300));
+          }
         } else {
           hasNext = false;
         }
