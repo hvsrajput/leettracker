@@ -1,6 +1,6 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
-const { putItem, getItem, queryItems, scanItems, updateItem } = require('../db/dynamodb');
+const { putItem, getItem, queryItems, scanItems, updateItem, deleteItem } = require('../db/dynamodb');
 
 const router = express.Router();
 
@@ -152,6 +152,19 @@ module.exports = function () {
 
       const createdAt = new Date().toISOString();
 
+      if (patternName) {
+        const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+        if (existingPattern.length === 0) {
+          await putItem({
+            PK: 'PATTERN',
+            SK: `PAT#${patternName}`,
+            name: patternName,
+            isDefault: 0,
+            createdBy: req.userId,
+          });
+        }
+      }
+
       await putItem({
         PK: `PROBLEM#${num}`,
         SK: 'DETAIL',
@@ -220,6 +233,25 @@ module.exports = function () {
     } catch (err) {
       console.error('Toggle error:', err);
       res.status(500).json({ error: 'Failed to toggle problem status' });
+    }
+  });
+
+  // Delete problem
+  router.delete('/:id', auth, async (req, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
+      
+      const existing = await getItem(`PROBLEM#${problemId}`, 'DETAIL');
+      if (!existing) {
+        return res.status(404).json({ error: 'Problem not found' });
+      }
+
+      await deleteItem(`PROBLEM#${problemId}`, 'DETAIL');
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Delete problem error:', err);
+      res.status(500).json({ error: 'Failed to delete problem' });
     }
   });
 

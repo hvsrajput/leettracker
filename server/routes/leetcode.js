@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const { auth } = require('../middleware/auth');
-const { putItem, getItem } = require('../db/dynamodb');
+const { putItem, getItem, queryItems } = require('../db/dynamodb');
 
 const router = express.Router();
 
@@ -16,83 +16,70 @@ problemsDataset.forEach(p => {
 
 module.exports = function () {
   router.post('/import', auth, async (req, res) => {
-    const { username } = req.body;
-    if (!username) {
-      return res.status(400).json({ error: 'LeetCode username is required' });
+    const { username, sessionCookie } = req.body;
+    if (!username && !sessionCookie) {
+      return res.status(400).json({ error: 'LeetCode username or Session Cookie is required' });
     }
 
     try {
-      // Fetch user profile calendar and recent submissions
-      const leetcodeQuery = `
-        query getUserProfile($username: String!) {
-          matchedUser(username: $username) {
-            submissionCalendar
-          }
-          recentAcSubmissionList(username: $username, limit: 50) {
-            id
-            title
-            titleSlug
-            timestamp
+      let recentSubs = [];
+      
+      if (sessionCookie) {
+        // Authenticated REST API (Bypasses 20-item public limit)
+        let offset = 0;
+        let limit = 100;
+        let hasNext = true;
+        
+        while (hasNext) {
+          try {
+            const subResp = await axios.get(`https://leetcode.com/api/submissions/?offset=${offset}&limit=${limit}`, {
+              headers: {
+                'Cookie': `LEETCODE_SESSION=${sessionCookie}`,
+                'Referer': 'https://leetcode.com'
+              }
+            });
+            const dump = subResp.data.submissions_dump || [];
+            
+            for (const sub of dump) {
+              if (sub.status_display === 'Accepted') {
+                recentSubs.push({
+                  titleSlug: sub.title_slug,
+                  timestamp: sub.timestamp
+                });
+              }
+            }
+            
+            hasNext = subResp.data.has_next;
+            offset += limit;
+          } catch (err) {
+            console.error('REST API Submissions error:', err.message);
+            // Break loop on failure, but process what we got
+            break; 
           }
         }
-      `;
-
-      const lcResp = await axios.post('https://leetcode.com/graphql', {
-        query: leetcodeQuery,
-        variables: { username }
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Referer': 'https://leetcode.com'
-        }
-      });
-
-      const matchedUser = lcResp.data?.data?.matchedUser;
-      if (!matchedUser) {
-        return res.status(404).json({ error: 'LeetCode user not found' });
-      }
-
-      // 1. Process submission calendar
-      // The calendar is a JSON string of UnixTimestamp (seconds) -> count mapped to dates
-      let calendarMap = {};
-      try {
-        const calData = JSON.parse(matchedUser.submissionCalendar || '{}');
-        Object.keys(calData).forEach(timestamp => {
-          const date = new Date(parseInt(timestamp) * 1000).toISOString().split('T')[0];
-          calendarMap[date] = (calendarMap[date] || 0) + calData[timestamp];
-        });
-      } catch (err) {
-        console.error('Error parsing submission calendar:', err);
-      }
-
-      // Note: LeetCode doesn't return the exact problem ID in the submissionCalendar,
-      // only the total count per day.
-      // To import accurately, we will rely on recentAcSubmissionList instead for exact problems.
-      // Since recentAcSubmissionList is limited to 20/50, we can also import all AC problems from userProfileUserQuestionProgressV2.
-      // Wait, let's just make a second query to get all accepted problems!
-
-      const progressQuery = `
-        query userProfileUserQuestionProgressV2($userSlug: String!) {
-          userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-            numAcceptedQuestions {
-              count
-              difficulty
+      } else {
+        // Public GraphQL API (Hardcapped to 20 AC submissions)
+        const leetcodeQuery = `
+          query getUserProfile($username: String!) {
+            recentAcSubmissionList(username: $username, limit: 50) {
+              titleSlug
+              timestamp
             }
           }
-          recentAcSubmissionList(username: $userSlug, limit: 100) {
-            titleSlug
-            timestamp
+        `;
+        const lcResp = await axios.post('https://leetcode.com/graphql', {
+          query: leetcodeQuery,
+          variables: { username }
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Referer': 'https://leetcode.com'
           }
-        }
-      `;
+        });
+        
+        recentSubs = lcResp.data?.data?.recentAcSubmissionList || [];
+      }
 
-      // Actually LeetCode's API doesn't allow easily fetching ALL accepted submission dates for a user in one go.
-      // We will just fetch the 100 most recent AC submissions, and apply the dates.
-      // We will also use the submissionCalendar data to bulk update the User's heat map or we can just rely on PROGRESS# entries.
-      // Wait, the Heatmap reads PROGRESS# resolved items dynamically. But we don't have dates for all of them.
-      // For now, let's just insert PROGRESS# items for the recentAcSubmissionList.
-      const recentSubs = lcResp.data?.data?.recentAcSubmissionList || [];
-      
       let importedCount = 0;
       for (const sub of recentSubs) {
         const problemData = datasetMapBySlug.get(sub.titleSlug);
@@ -103,6 +90,22 @@ module.exports = function () {
           // Ensure problem exists
           const existingProb = await getItem(`PROBLEM#${num}`, 'DETAIL');
           if (!existingProb) {
+            const patternName = problemData.topics?.[0] || 'Uncategorized';
+            
+            // Dynamic pattern creation
+            if (patternName) {
+              const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+              if (existingPattern.length === 0) {
+                await putItem({
+                  PK: 'PATTERN',
+                  SK: `PAT#${patternName}`,
+                  name: patternName,
+                  isDefault: 0,
+                  createdBy: req.userId,
+                });
+              }
+            }
+
             await putItem({
               PK: `PROBLEM#${num}`,
               SK: 'DETAIL',
@@ -111,7 +114,7 @@ module.exports = function () {
               slug: problemData.slug,
               difficulty: problemData.difficulty,
               url: problemData.url,
-              patternName: problemData.topics?.[0] || 'Uncategorized',
+              patternName: patternName,
               addedBy: req.userId,
               createdAt: new Date().toISOString(),
             });

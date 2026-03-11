@@ -67,7 +67,7 @@
 
 .problem-header-row {
   display: grid;
-  grid-template-columns: 60px 60px 1fr 100px 130px;
+  grid-template-columns: 60px 60px 1fr 100px 130px 50px;
   padding: 0.7rem 1rem;
   background: var(--bg-tertiary);
   font-size: 0.75rem;
@@ -80,7 +80,7 @@
 
 .problem-row {
   display: grid;
-  grid-template-columns: 60px 60px 1fr 100px 130px;
+  grid-template-columns: 60px 60px 1fr 100px 130px 50px;
   padding: 0.65rem 1rem;
   align-items: center;
   border-bottom: 1px solid var(--border-light);
@@ -282,7 +282,7 @@
 @media (max-width: 768px) {
   .problem-header-row,
   .problem-row {
-    grid-template-columns: 40px 45px 1fr 75px;
+    grid-template-columns: 40px 45px 1fr 75px 40px;
   }
   
   .col-pattern {

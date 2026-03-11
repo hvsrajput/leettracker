@@ -21,6 +21,7 @@ export default function Problems() {
   // LeetCode Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [lcUsername, setLcUsername] = useState('');
+  const [lcSessionCookie, setLcSessionCookie] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
   const [importError, setImportError] = useState('');
@@ -110,6 +111,17 @@ export default function Problems() {
     }
   };
 
+  const handleDelete = async (problemId, problemTitle) => {
+    if (window.confirm(`Are you sure you want to delete "${problemTitle}" from the tracker?`)) {
+      try {
+        await api.delete(`/problems/${problemId}`);
+        setProblems(prev => prev.filter(p => p.id !== problemId));
+      } catch (err) {
+        console.error('Failed to delete problem', err);
+      }
+    }
+  };
+
   const handleAddPattern = async () => {
     if (!newPatternName.trim()) return;
     try {
@@ -123,14 +135,18 @@ export default function Problems() {
   };
 
   const handleImport = async () => {
-    if (!lcUsername.trim()) return;
+    if (!lcUsername.trim() && !lcSessionCookie.trim()) return;
     setIsImporting(true);
     setImportError('');
     setImportResult('');
     try {
-      const res = await api.post('/leetcode/import', { username: lcUsername.trim() });
+      const res = await api.post('/leetcode/import', { 
+        username: lcUsername.trim(),
+        sessionCookie: lcSessionCookie.trim()
+      });
       setImportResult(`Successfully imported ${res.data.imported} new solutions!`);
       setLcUsername('');
+      setLcSessionCookie('');
       fetchProblems(); // Refresh the grid
     } catch (err) {
       setImportError(err.response?.data?.error || 'Failed to import from LeetCode');
@@ -228,6 +244,7 @@ export default function Problems() {
             <span className="col-title">Title</span>
             <span className="col-diff">Difficulty</span>
             <span className="col-pattern">Pattern</span>
+            <span className="col-action"></span>
           </div>
           {problems.map((p, i) => (
             <div 
@@ -257,6 +274,17 @@ export default function Problems() {
                 {p.pattern_name && (
                   <span className="badge badge-pattern">{p.pattern_name}</span>
                 )}
+              </span>
+              <span className="col-action flex justify-center items-center">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }} 
+                  className="text-gray-500 hover:text-red-500 transition-colors" 
+                  title="Delete problem"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                  </svg>
+                </button>
               </span>
             </div>
           ))}
@@ -353,10 +381,10 @@ export default function Problems() {
           <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
             <h2>Import from LeetCode</h2>
             <p className="text-gray-400 text-sm mb-4">
-              Enter your LeetCode username to automatically import your mostly recently accepted submissions and update your tracker.
+              Enter your LeetCode username to automatically import your mostly recently accepted submissions (up to 20).
             </p>
             <div className="form-group">
-              <label>LeetCode Username</label>
+              <label>LeetCode Username (Public profile)</label>
               <input
                 type="text"
                 value={lcUsername}
@@ -366,13 +394,25 @@ export default function Problems() {
                 onKeyDown={e => e.key === 'Enter' && handleImport()}
               />
             </div>
-            {importError && <div className="auth-error">{importError}</div>}
-            {importResult && <div className="text-green-500 mb-4">{importResult}</div>}
+            <div className="form-group mt-2">
+              <label className="text-sm! text-gray-300!">LEETCODE_SESSION Cookie (Optional, bypasses 20 limit!)</label>
+              <input
+                type="password"
+                value={lcSessionCookie}
+                onChange={e => setLcSessionCookie(e.target.value)}
+                placeholder="Paste session cookie here"
+                disabled={isImporting}
+                onKeyDown={e => e.key === 'Enter' && handleImport()}
+              />
+              <p className="text-xs text-gray-500 mt-1">To import ALL problems: Open LeetCode, F12 &gt; Application/Storage &gt; Cookies &gt; copy the value of LEETCODE_SESSION.</p>
+            </div>
+            {importError && <div className="auth-error mt-4">{importError}</div>}
+            {importResult && <div className="text-green-500 mb-4 mt-4">{importResult}</div>}
             <div className="form-actions mt-4">
               <button className="btn btn-secondary" onClick={() => setShowImportModal(false)} disabled={isImporting}>
                 Close
               </button>
-              <button className="btn btn-primary flex items-center justify-center gap-2" onClick={handleImport} disabled={isImporting || !lcUsername.trim()}>
+              <button className="btn btn-primary flex items-center justify-center gap-2" onClick={handleImport} disabled={isImporting || (!lcUsername.trim() && !lcSessionCookie.trim())}>
                 {isImporting ? (
                   <>
                     <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
