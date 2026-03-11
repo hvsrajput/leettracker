@@ -3,35 +3,28 @@ import axios from 'axios';
 import api from '../api';
 
 const CONSOLE_SCRIPT = `(async () => {
-  const meResp = await fetch('/graphql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: 'query { userStatus { username } }' })
-  });
-  const meJson = await meResp.json();
-  const username = meJson?.data?.userStatus?.username;
-  if (!username) { console.error('LeetTracker: Not logged in.'); return; }
-  console.log('LeetTracker: Detected user:', username);
+  console.log('LeetTracker: Fetching all solved problems...');
 
-  const profileResp = await fetch('/graphql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: \`query userProfileUserQuestionProgressV2($userSlug: String!) {
-        userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-          acceptedQuestionList { titleSlug }
-        }
-      }\`,
-      variables: { userSlug: username }
-    })
+  // Step 1: REST API — returns ALL solved slugs, no cap, authenticated
+  const apiResp = await fetch('/api/problems/all/', {
+    headers: { 'Content-Type': 'application/json' }
   });
-  const profileJson = await profileResp.json();
+  const apiJson = await apiResp.json();
+
+  if (!apiJson.stat_status_pairs) {
+    console.error('LeetTracker: Failed to fetch problems. Are you logged in?');
+    return;
+  }
+
   const allSlugs = new Set(
-    (profileJson?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [])
-    .map(q => q.titleSlug)
+    apiJson.stat_status_pairs
+      .filter(p => p.status === 'ac')
+      .map(p => p.stat.question__title_slug)
   );
-  console.log(\`LeetTracker: \${allSlugs.size} total solved problems found.\`);
 
+  console.log(\`LeetTracker: Found \${allSlugs.size} solved problems.\`);
+
+  // Step 2: submissionList pagination — get timestamps
   const subQuery = \`query submissionList($offset: Int!, $limit: Int!) {
     submissionList(offset: $offset, limit: $limit) {
       hasNext submissions { titleSlug statusDisplay timestamp }
@@ -40,6 +33,7 @@ const CONSOLE_SCRIPT = `(async () => {
 
   const dateMap = {};
   let offset = 0, hasNext = true, page = 1;
+
   while (hasNext) {
     console.log(\`LeetTracker: Fetching dates page \${page}...\`);
     const resp = await fetch('/graphql', {
@@ -50,23 +44,27 @@ const CONSOLE_SCRIPT = `(async () => {
     const json = await resp.json();
     const list = json?.data?.submissionList;
     if (!list) break;
+
     for (const sub of list.submissions)
       if (sub.statusDisplay === 'Accepted' && !dateMap[sub.titleSlug])
         dateMap[sub.titleSlug] = sub.timestamp;
+
     hasNext = list.hasNext;
     offset += 50;
     page++;
     if (hasNext) await new Promise(r => setTimeout(r, 400));
   }
 
+  // Step 3: Merge — all 36 slugs + best available timestamp
   const fallbackTs = Math.floor(Date.now() / 1000).toString();
   const solvedMap = {};
   for (const slug of allSlugs)
     solvedMap[slug] = dateMap[slug] || fallbackTs;
 
   const withDates = Object.values(solvedMap).filter(t => t !== fallbackTs).length;
-  console.log(\`LeetTracker: \${withDates}/\${allSlugs.size} have exact dates. Rest use today.\`);
+  console.log(\`LeetTracker: \${withDates}/\${allSlugs.size} have exact dates. Rest use today as fallback.\`);
 
+  // Step 4: Copy to clipboard
   const el = document.createElement('textarea');
   el.value = JSON.stringify(solvedMap);
   document.body.appendChild(el);
@@ -74,7 +72,7 @@ const CONSOLE_SCRIPT = `(async () => {
   document.execCommand('copy');
   document.body.removeChild(el);
   console.log('LeetTracker: Copied to clipboard! Paste it in LeetTracker.');
-})();`;
+})();\`;
 
 export default function LeetCodeImport({ onSuccess, onCancel }) {
   const [step, setStep] = useState(1);
