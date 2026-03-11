@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../api';
+import LeetCodeImport from '../components/LeetCodeImport';
 
 export default function Problems() {
   const [allProblems, setAllProblems] = useState([]);
@@ -9,19 +10,17 @@ export default function Problems() {
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [solvedFilter, setSolvedFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
+  
+  // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [preview, setPreview] = useState(null);
   const [addError, setAddError] = useState('');
-
-  // LeetCode Import State
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [lcSessionCookie, setLcSessionCookie] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState('');
-  const [importError, setImportError] = useState('');
 
   const fetchProblems = () => {
     setLoading(true);

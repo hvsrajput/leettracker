@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-import api from '../utils/api';
+import api from '../api';
 
 const CONSOLE_SCRIPT = `(async () => {
   const query = \`query submissionList($offset: Int!, $limit: Int!) {
