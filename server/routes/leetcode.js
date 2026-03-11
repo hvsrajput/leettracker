@@ -130,196 +130,91 @@ module.exports = function () {
       const submissionMap = new Map();
       
       if (sessionCookie) {
-        // Authenticated REST API (Bypasses 20-item public limit)
-        let offset = 0;
-        let limit = 20;
-        let hasNext = true;
-        
-        const cookieHeader = sessionCookie.includes('LEETCODE_SESSION=') 
-          ? sessionCookie 
-          : `LEETCODE_SESSION=${sessionCookie}`;
-        
-        let csrfToken = '';
-        const csrfMatch = cookieHeader.match(/csrftoken=([^;\s]+)/);
-        if (csrfMatch) {
-          csrfToken = csrfMatch[1];
-        } else {
-          try {
-            const csrfResp = await axios.get('https://leetcode.com', {
-              headers: { 'Cookie': cookieHeader },
-              maxRedirects: 0,
-              validateStatus: () => true,
-            });
-            const setCookies = csrfResp.headers['set-cookie'] || [];
-            for (const sc of setCookies) {
-              const m = sc.match(/csrftoken=([^;]+)/);
-              if (m) { csrfToken = m[1]; break; }
-            }
-          } catch (e) {
-            console.error('Failed to fetch CSRF token:', e.message);
-          }
-        }
-        
-        const fullCookie = csrfToken && !cookieHeader.includes('csrftoken=')
-          ? `${cookieHeader}; csrftoken=${csrfToken}`
-          : cookieHeader;
-        
-        while (hasNext) {
-          try {
-            const headers = {
-              'Cookie': fullCookie,
-              'Referer': 'https://leetcode.com',
-              'User-Agent': 'Mozilla/5.0',
-            };
-            if (csrfToken) {
-              headers['x-csrftoken'] = csrfToken;
-            }
-
-            const subResp = await axios.get(`https://leetcode.com/api/submissions/?offset=${offset}&limit=${limit}`, {
-              headers,
-              timeout: 15000
-            });
-            const dump = subResp.data.submissions_dump || [];
-            
-            for (const sub of dump) {
-              const slug = sub.title_slug;
-              const isAccepted = sub.status_display === 'Accepted';
-              const existing = submissionMap.get(slug);
-              
-              // Solved always wins
-              if (!existing) {
-                submissionMap.set(slug, {
-                  titleSlug: slug,
-                  timestamp: sub.timestamp,
-                  status: isAccepted ? 'solved' : 'attempted'
-                });
-              } else if (isAccepted && existing.status !== 'solved') {
-                existing.status = 'solved';
-                existing.timestamp = sub.timestamp;
-              }
-            }
-            
-            if (dump.length === 0) hasNext = false;
-            else hasNext = subResp.data.has_next;
-            offset += limit;
-          } catch (err) {
-            console.error('REST API Submissions error:', err.message);
-            // If rate limited, we wait and try one more time before breaking
-            if (err.response && err.response.status === 429) {
-              console.log('Rate limited, waiting 2s...');
-              await new Promise(r => setTimeout(r, 2000));
-              try {
-                const subRespRetry = await axios.get(`https://leetcode.com/api/submissions/?offset=${offset}&limit=${limit}`, {
-                  headers, timeout: 15000
-                });
-                const dumpRetry = subRespRetry.data.submissions_dump || [];
-                for (const sub of dumpRetry) {
-                  const slug = sub.title_slug;
-                  const isAccepted = sub.status_display === 'Accepted';
-                  const existing = submissionMap.get(slug);
-                  if (!existing) {
-                    submissionMap.set(slug, { titleSlug: slug, timestamp: sub.timestamp, status: isAccepted ? 'solved' : 'attempted' });
-                  } else if (isAccepted && existing.status !== 'solved') {
-                    existing.status = 'solved';
-                    existing.timestamp = sub.timestamp;
-                  }
-                }
-                if (dumpRetry.length === 0) hasNext = false;
-                else hasNext = subRespRetry.data.has_next;
-                offset += limit;
-              } catch (e2) {
-                console.error('Retry failed:', e2.message);
-                break;
-              }
-            } else {
-              break; 
-            }
-          }
-        }
-      } else {
-        // Public GraphQL API — fetch BOTH AC and recent submissions
-        // 1. Fetch accepted submissions
-        const acQuery = `
-          query getUserProfile($username: String!) {
-            recentAcSubmissionList(username: $username, limit: 500) {
+      // Query loop for paginated submissions
+      const query = `
+        query submissionList($offset: Int!, $limit: Int!) {
+          submissionList(offset: $offset, limit: $limit) {
+            hasNext
+            submissions {
               titleSlug
-              timestamp
-            }
-          }
-        `;
-        const acResp = await axios.post('https://leetcode.com/graphql', {
-          query: acQuery,
-          variables: { username }
-        }, {
-          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
-        });
-        
-        const acSubs = acResp.data?.data?.recentAcSubmissionList || [];
-        for (const sub of acSubs) {
-          submissionMap.set(sub.titleSlug, {
-            titleSlug: sub.titleSlug,
-            timestamp: sub.timestamp,
-            status: 'solved'
-          });
-        }
-        
-        // 2. Fetch recent submissions (all statuses) to find attempted
-        const recentQuery = `
-          query getRecentSubmissions($username: String!, $limit: Int!) {
-            recentSubmissionList(username: $username, limit: $limit) {
-              titleSlug
-              timestamp
               statusDisplay
             }
           }
-        `;
-        const recentResp = await axios.post('https://leetcode.com/graphql', {
-          query: recentQuery,
-          variables: { username, limit: 500 }
-        }, {
-          headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
-        });
-        
-        const recentSubs = recentResp.data?.data?.recentSubmissionList || [];
-        for (const sub of recentSubs) {
-          const existing = submissionMap.get(sub.titleSlug);
-          if (!existing) {
-            // Not in AC list → attempted
-            submissionMap.set(sub.titleSlug, {
-              titleSlug: sub.titleSlug,
-              timestamp: sub.timestamp,
-              status: sub.statusDisplay === 'Accepted' ? 'solved' : 'attempted'
-            });
+        }
+      `;
+
+      let offset = 0;
+      const limit = 50;
+      let hasNext = true;
+      const solvedSlugs = new Set();
+      let failedAuth = false;
+
+      while (hasNext) {
+        let graphqlResp;
+        try {
+          graphqlResp = await axios.post('https://leetcode.com/graphql', {
+            query,
+            variables: { offset, limit }
+          }, {
+            headers,
+            timeout: 10000
+          });
+        } catch (err) {
+          if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+            failedAuth = true;
+            break;
           }
-          // If already marked solved, don't downgrade
+          console.error("GraphQL Pagination Error:", err.message);
+          break;
+        }
+
+        const data = graphqlResp.data?.data;
+        if (!data || graphqlResp.data?.errors) {
+          failedAuth = true;
+          break;
+        }
+
+        const list = data.submissionList;
+        if (list && list.submissions) {
+          for (const sub of list.submissions) {
+            if (sub.statusDisplay === 'Accepted') {
+              solvedSlugs.add(sub.titleSlug);
+            }
+          }
+          hasNext = list.hasNext;
+          offset += limit;
+        } else {
+          hasNext = false;
         }
       }
+
+      if (failedAuth) {
+        return res.status(401).json({ error: 'LeetCode session expired or invalid. Please re-import cookies.' });
+      }
+
+      const timestamp = new Date().toISOString();
 
       let solvedCount = 0;
       let attemptedCount = 0;
       let alreadyExistsCount = 0;
       let failedCount = 0;
 
-      for (const [slug, sub] of submissionMap) {
+      for (const slug of solvedSlugs) {
         try {
+          // Strict mapping against problems.json dataset
           let problemData = datasetMapBySlug.get(slug);
           
           if (!problemData) {
-            problemData = await fetchProblemFromLeetCode(slug);
-            if (!problemData) {
-              failedCount++;
-              continue;
-            }
+            failedCount++; // Problem not in dataset
+            continue;
           }
 
           const num = problemData.number;
-          const ts = new Date(parseInt(sub.timestamp) * 1000).toISOString();
 
           await ensureProblemExists(problemData, req.userId);
           
-          const result = await updateProgress(req.userId, num, sub.status, ts);
+          const result = await updateProgress(req.userId, num, 'solved', timestamp);
           if (result === 'solved') solvedCount++;
-          else if (result === 'attempted') attemptedCount++;
           else alreadyExistsCount++;
         } catch (err) {
           console.error(`Failed to import problem "${slug}":`, err.message);
@@ -327,13 +222,14 @@ module.exports = function () {
         }
       }
 
+      }
+      
       res.json({ 
         success: true, 
         solved: solvedCount,
-        attempted: attemptedCount,
         alreadyExists: alreadyExistsCount,
         failed: failedCount,
-        total: submissionMap.size
+        total: solvedSlugs.size
       });
     } catch (error) {
       console.error('LeetCode Import Error:', error);
@@ -351,75 +247,69 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      const submissionMap = new Map();
+      // Query loop for paginated submissions
+      const query = `
+        query submissionList($offset: Int!, $limit: Int!) {
+          submissionList(offset: $offset, limit: $limit) {
+            hasNext
+            submissions {
+              titleSlug
+              statusDisplay
+            }
+          }
+        }
+      `;
 
-      // 1. Fetch accepted submissions
-      const acQuery = `
-        query getUserProfile($username: String!) {
-          recentAcSubmissionList(username: $username, limit: 500) {
-            titleSlug
-            timestamp
-          }
-        }
-      `;
-      const acResp = await axios.post('https://leetcode.com/graphql', {
-        query: acQuery,
-        variables: { username }
-      }, {
-        headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
-      });
+      let offset = 0;
+      const limit = 50;
+      let hasNext = true;
+      const solvedSlugs = new Set();
       
-      const acSubs = acResp.data?.data?.recentAcSubmissionList || [];
-      for (const sub of acSubs) {
-        submissionMap.set(sub.titleSlug, {
-          titleSlug: sub.titleSlug,
-          timestamp: sub.timestamp,
-          status: 'solved'
-        });
-      }
-      
-      // 2. Fetch recent submissions (all statuses) for attempted
-      const recentQuery = `
-        query getRecentSubmissions($username: String!, $limit: Int!) {
-          recentSubmissionList(username: $username, limit: $limit) {
-            titleSlug
-            timestamp
-            statusDisplay
-          }
-        }
-      `;
-      const recentResp = await axios.post('https://leetcode.com/graphql', {
-        query: recentQuery,
-        variables: { username, limit: 500 }
-      }, {
-        headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' }
-      });
-      
-      const recentSubs = recentResp.data?.data?.recentSubmissionList || [];
-      for (const sub of recentSubs) {
-        const existing = submissionMap.get(sub.titleSlug);
-        if (!existing) {
-          submissionMap.set(sub.titleSlug, {
-            titleSlug: sub.titleSlug,
-            timestamp: sub.timestamp,
-            status: sub.statusDisplay === 'Accepted' ? 'solved' : 'attempted'
+      while (hasNext) {
+        let graphqlResp;
+        try {
+          graphqlResp = await axios.post('https://leetcode.com/graphql', {
+            query,
+            variables: { offset, limit, username }
+          }, {
+            headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
+            timeout: 10000
           });
+        } catch (err) {
+          console.error("GraphQL Sync Pagination Error:", err.message);
+          break;
+        }
+
+        const data = graphqlResp.data?.data;
+        if (!data || graphqlResp.data?.errors) {
+          break;
+        }
+
+        const list = data.submissionList;
+        if (list && list.submissions) {
+          for (const sub of list.submissions) {
+            if (sub.statusDisplay === 'Accepted') {
+              solvedSlugs.add(sub.titleSlug);
+            }
+          }
+          hasNext = list.hasNext;
+          offset += limit;
+        } else {
+          hasNext = false;
         }
       }
 
+      const timestamp = new Date().toISOString();
       let solvedCount = 0;
       let attemptedCount = 0;
 
-      for (const [slug, sub] of submissionMap) {
+      for (const slug of solvedSlugs) {
         const problemData = datasetMapBySlug.get(slug);
         if (problemData) {
           const num = problemData.number;
-          const ts = new Date(parseInt(sub.timestamp) * 1000).toISOString();
-
           await ensureProblemExists(problemData, req.userId);
-          const result = await updateProgress(req.userId, num, sub.status, ts);
+          const result = await updateProgress(req.userId, num, 'solved', timestamp);
           if (result === 'solved') solvedCount++;
-          else if (result === 'attempted') attemptedCount++;
         }
       }
 
