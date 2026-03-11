@@ -120,56 +120,18 @@ async function updateProgress(userId, num, newStatus, timestamp) {
 
 module.exports = function () {
   router.post('/import', auth, async (req, res) => {
-    const { username, sessionCookie } = req.body;
-    if (!username && !sessionCookie) {
-      return res.status(400).json({ error: 'LeetCode username or Session Cookie is required' });
-    }
-    if (!username) {
-      return res.status(400).json({ error: 'LeetCode username is required for import.' });
+    const { solvedMap } = req.body;
+
+    if (!solvedMap || typeof solvedMap !== 'object' || Object.keys(solvedMap).length === 0) {
+      return res.status(400).json({ error: 'solvedMap is required. Please follow the import instructions.' });
     }
 
     try {
       let solvedCount = 0;
       let alreadyExistsCount = 0;
       let failedCount = 0;
-      const solvedSlugs = new Set();
 
-      if (sessionCookie || username) {
-        // Use public userProfileUserQuestionProgressV2 to avoid Cloudflare session/IP binding issues
-        const query = `
-          query userProfileUserQuestionProgressV2($userSlug: String!) {
-            userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-              acceptedQuestionList {
-                titleSlug
-              }
-            }
-          }
-        `;
-
-        try {
-          const resp = await axios.post('https://leetcode.com/graphql', {
-            query,
-            variables: { userSlug: username }
-          }, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Referer': 'https://leetcode.com',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            timeout: 10000
-          });
-
-          const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
-          accepted.forEach(q => solvedSlugs.add(q.titleSlug));
-        } catch (err) {
-          console.error('LeetCode GraphQL error:', err.response?.status, err.message);
-          return res.status(502).json({ error: 'Failed to reach LeetCode. Try again.' });
-        }
-      }
-
-      const timestamp = new Date().toISOString();
-
-      for (const slug of solvedSlugs) {
+      for (const [slug, unixTimestamp] of Object.entries(solvedMap)) {
         try {
           // Strict mapping against problems.json dataset
           let problemData = datasetMapBySlug.get(slug);
@@ -180,10 +142,11 @@ module.exports = function () {
           }
 
           const num = problemData.number;
+          const ts = new Date(parseInt(unixTimestamp) * 1000).toISOString();
 
           await ensureProblemExists(problemData, req.userId);
           
-          const result = await updateProgress(req.userId, num, 'solved', timestamp);
+          const result = await updateProgress(req.userId, num, 'solved', ts);
           if (result === 'solved') solvedCount++;
           else alreadyExistsCount++;
         } catch (err) {
@@ -197,7 +160,7 @@ module.exports = function () {
         solved: solvedCount,
         alreadyExists: alreadyExistsCount,
         failed: failedCount,
-        total: solvedSlugs.size
+        total: Object.keys(solvedMap).length
       });
     } catch (error) {
       console.error('LeetCode Import Error:', error);

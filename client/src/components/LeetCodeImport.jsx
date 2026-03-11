@@ -1,0 +1,241 @@
+import { useState } from 'react';
+import axios from 'axios';
+import api from '../utils/api';
+
+const CONSOLE_SCRIPT = `(async () => {
+  const query = \`query submissionList($offset: Int!, $limit: Int!) {
+    submissionList(offset: $offset, limit: $limit) {
+      hasNext submissions { titleSlug statusDisplay timestamp }
+    }
+  }\`;
+  const solvedMap = {};
+  let offset = 0, hasNext = true, page = 1;
+  console.log('LeetTracker: Starting import...');
+  while (hasNext) {
+    console.log(\`LeetTracker: Fetching page \${page}...\`);
+    const resp = await fetch('/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables: { offset, limit: 50 } })
+    });
+    const json = await resp.json();
+    const list = json?.data?.submissionList;
+    if (!list) { console.error('LeetTracker: Error. Are you logged in?'); break; }
+    for (const sub of list.submissions)
+      if (sub.statusDisplay === 'Accepted' && !solvedMap[sub.titleSlug])
+        solvedMap[sub.titleSlug] = sub.timestamp;
+    hasNext = list.hasNext;
+    offset += 50;
+    page++;
+    if (hasNext) await new Promise(r => setTimeout(r, 400));
+  }
+  console.log(\`LeetTracker: Done! \${Object.keys(solvedMap).length} problems found.\`);
+  copy(JSON.stringify(solvedMap));
+  console.log('LeetTracker: Copied to clipboard!');
+})();`;
+
+export default function LeetCodeImport({ onSuccess, onCancel }) {
+  const [step, setStep] = useState(1);
+  const [pastedData, setPastedData] = useState('');
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(CONSOLE_SCRIPT);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleImport = async () => {
+    setError('');
+    setLoading(true);
+
+    let solvedMap;
+    try {
+      solvedMap = JSON.parse(pastedData.trim());
+      if (typeof solvedMap !== 'object' || Array.isArray(solvedMap)) throw new Error();
+    } catch {
+      setError('Invalid data. Make sure you pasted the full output from the console script.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const resp = await api.post('/leetcode/import', { solvedMap });
+      setResult(resp.data);
+      setStep(4);
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Import failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="text-gray-300">
+      {/* Step indicators */}
+      <div className="flex gap-2 mb-6 justify-center">
+        {[1, 2, 3].map(s => (
+          <div key={s} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s ? 'bg-[#FFA116] text-black' : 'bg-white/10 text-gray-500'}`}>
+            {s}
+          </div>
+        ))}
+      </div>
+
+      {/* ── STEP 1: Go to LeetCode ── */}
+      {step === 1 && (
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-2">Step 1: Open LeetCode</h3>
+            <p className="text-gray-400">Open a new tab and go to LeetCode. Make sure you are logged in.</p>
+          </div>
+          
+          <div className="flex gap-4">
+            <a
+              href="https://leetcode.com"
+              target="_blank"
+              rel="noreferrer"
+              className="px-6 py-2.5 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors flex-1 text-center"
+              onClick={() => setStep(2)}
+            >
+              Open LeetCode &rarr;
+            </a>
+            <button className="px-6 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors flex-1" onClick={() => setStep(2)}>
+              I'm already logged in
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 2: Run the script ── */}
+      {step === 2 && (
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-2">Step 2: Run the Script in Console</h3>
+            <ol className="list-decimal pl-5 space-y-2 text-sm text-gray-400">
+              <li>On the LeetCode tab, press <kbd className="bg-white/10 px-1 rounded text-gray-200">F12</kbd> (Windows) or <kbd className="bg-white/10 px-1 rounded text-gray-200">Cmd + Option + J</kbd> (Mac) to open DevTools.</li>
+              <li>Click the <strong className="text-white">Console</strong> tab.</li>
+              <li>Copy the script below and paste it into the console, then press <kbd className="bg-white/10 px-1 rounded text-gray-200">Enter</kbd>.</li>
+              <li>Wait for the message: <code className="text-[#FFA116] bg-[#FFA116]/10 px-1 rounded">LeetTracker: Copied to clipboard!</code></li>
+            </ol>
+          </div>
+
+          <div className="relative group">
+            <pre className="bg-black/50 border border-white/10 p-4 rounded-xl text-xs font-mono text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">
+              {CONSOLE_SCRIPT}
+            </pre>
+            <button 
+              className="absolute top-3 right-3 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-md transition-colors backdrop-blur-md border border-white/10"
+              onClick={handleCopyScript}
+            >
+              {copied ? '✓ Copied!' : 'Copy'}
+            </button>
+          </div>
+
+          <p className="text-xs text-yellow-500/80 bg-yellow-500/10 p-3 rounded-lg border border-yellow-500/20">
+            ⚠️ Never paste scripts from unknown sources into your browser console.
+            This script only reads your submission list from LeetCode and copies it locally — 
+            it does not send your cookies or credentials anywhere.
+          </p>
+
+          <div className="flex gap-4">
+            <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => setStep(1)}>
+              &larr; Back
+            </button>
+            <button className="flex-1 px-6 py-2.5 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors" onClick={() => setStep(3)}>
+              Script ran successfully &rarr;
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 3: Paste data ── */}
+      {step === 3 && (
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-2">Step 3: Paste the Result Here</h3>
+            <p className="text-sm text-gray-400">
+              The script copied your data to clipboard automatically.
+              Just paste it below (<kbd className="bg-white/10 px-1 rounded">Ctrl+V</kbd> / <kbd className="bg-white/10 px-1 rounded">Cmd+V</kbd>).
+            </p>
+          </div>
+
+          <textarea
+            className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-mono text-sm text-gray-300 focus:border-[#FFA116] focus:ring-1 focus:ring-[#FFA116] outline-none transition-all placeholder:text-gray-600"
+            rows={5}
+            placeholder='Paste your data here... it should start with {"two-sum":"1693000000",...}'
+            value={pastedData}
+            onChange={e => {
+              setPastedData(e.target.value);
+              setError('');
+            }}
+          />
+
+          {error && <p className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">❌ {error}</p>}
+
+          <div className="flex gap-4">
+            <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => setStep(2)}>
+              &larr; Back
+            </button>
+            <button
+              className="flex-1 px-6 py-2.5 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              onClick={handleImport}
+              disabled={!pastedData.trim() || loading}
+            >
+              {loading ? (
+                <><svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Importing...</>
+              ) : 'Import My Problems'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: Success ── */}
+      {step === 4 && result && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Import Complete!</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">{result.solved}</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Newly Imported</div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-gray-300">{result.alreadyExists}</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Already Existed</div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-red-400">{result.failed}</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Not in Dataset</div>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-white">{result.total}</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Total Found</div>
+            </div>
+          </div>
+          
+          <div className="flex gap-4">
+            <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => {
+              setStep(1);
+              setPastedData('');
+              setResult(null);
+            }}>
+              Import Again
+            </button>
+            <button className="flex-1 px-6 py-2.5 rounded-lg bg-white text-black font-semibold hover:bg-gray-200 transition-colors" onClick={onCancel}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

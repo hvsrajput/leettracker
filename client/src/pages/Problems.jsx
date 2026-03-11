@@ -136,29 +136,6 @@ export default function Problems() {
     }
   };
 
-  const handleImport = async () => {
-    if (!lcSessionCookie.trim()) return;
-    setIsImporting(true);
-    setImportError('');
-    setImportResult('');
-    try {
-      const res = await api.post('/leetcode/import', { 
-        sessionCookie: lcSessionCookie.trim()
-      });
-      const { solved, alreadyExists, failed, total } = res.data;
-      let msg = `Found ${total} solved submissions. Imported ${solved} new problems.`;
-      if (alreadyExists) msg += ` ${alreadyExists} already tracked.`;
-      if (failed) msg += ` ${failed} unmapped/failed.`;
-      setImportResult(msg);
-      setLcSessionCookie('');
-      fetchProblems();
-    } catch (err) {
-      setImportError(err.response?.data?.error || 'Failed to import from LeetCode');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -531,13 +508,12 @@ export default function Problems() {
 
       {/* Connect LeetCode Modal */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => !isImporting && setShowImportModal(false)}>
-          <div className="bg-neutral-900 border border-white/10 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowImportModal(false)}>
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1c1c1c] p-6 border-b border-white/10 relative">
               <button 
-                onClick={() => !isImporting && setShowImportModal(false)}
+                onClick={() => setShowImportModal(false)}
                 className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
-                disabled={isImporting}
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -548,68 +524,17 @@ export default function Problems() {
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white leading-tight">Connect LeetCode</h2>
-                  <p className="text-gray-400 text-sm">Sync your submissions automatically</p>
+                  <h2 className="text-xl font-bold text-white leading-tight">Import from LeetCode</h2>
+                  <p className="text-gray-400 text-sm">Sync your submissions directly from your browser</p>
                 </div>
               </div>
             </div>
 
             <div className="p-6">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-6 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1 h-full bg-[#FFA116]"></div>
-                <h3 className="font-semibold text-white mb-2 text-sm flex items-center gap-2">
-                  <svg className="w-4 h-4 text-[#FFA116]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  How to get your session cookie:
-                </h3>
-                <ol className="text-sm text-gray-400 pl-4 space-y-1.5 list-decimal">
-                  <li>Log in to <a href="https://leetcode.com" target="_blank" rel="noreferrer" className="text-[#FFA116] hover:underline">leetcode.com</a></li>
-                  <li>Right click anywhere → <strong>Inspect</strong> (F12)</li>
-                  <li>Go to <strong>Network</strong> tab, refresh page</li>
-                  <li>Click first request (e.g. `graphql`)</li>
-                  <li>Scroll to <strong>Request Headers</strong> and copy the <code className="bg-black/50 px-1 py-0.5 rounded text-indigo-300 font-mono text-xs">Cookie:</code> value</li>
-                </ol>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-gray-300 font-medium mb-1.5 block flex justify-between">
-                    Session Cookie <span className="text-gray-500 font-normal ml-2 tracking-wide">(Required)</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={lcSessionCookie}
-                    onChange={e => setLcSessionCookie(e.target.value)}
-                    placeholder="Paste the 'Cookie' header string..."
-                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600 font-mono text-xs"
-                    disabled={isImporting}
-                    onKeyDown={e => e.key === 'Enter' && handleImport()}
-                  />
-                </div>
-              </div>
-
-              {importError && (
-                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{importError}</div>
-              )}
-              {importResult && (
-                <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">{importResult}</div>
-              )}
-
-              <div className="mt-8 flex gap-3">
-                <button 
-                  className="flex-1 py-2.5 px-4 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors disabled:opacity-50" 
-                  onClick={() => setShowImportModal(false)} 
-                  disabled={isImporting}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="flex-[2] py-2.5 px-4 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 flex items-center justify-center gap-2" 
-                  onClick={handleImport} 
-                  disabled={isImporting || !lcSessionCookie.trim()}
-                >
-                  {isImporting ? 'Syncing...' : 'Sync Problems'}
-                </button>
-              </div>
+              <LeetCodeImport 
+                onSuccess={() => fetchProblems()} 
+                onCancel={() => setShowImportModal(false)}
+              />
             </div>
           </div>
         </div>
