@@ -199,11 +199,41 @@ module.exports = function () {
               }
             }
             
-            hasNext = subResp.data.has_next;
+            if (dump.length === 0) hasNext = false;
+            else hasNext = subResp.data.has_next;
             offset += limit;
           } catch (err) {
             console.error('REST API Submissions error:', err.message);
-            break; 
+            // If rate limited, we wait and try one more time before breaking
+            if (err.response && err.response.status === 429) {
+              console.log('Rate limited, waiting 2s...');
+              await new Promise(r => setTimeout(r, 2000));
+              try {
+                const subRespRetry = await axios.get(`https://leetcode.com/api/submissions/?offset=${offset}&limit=${limit}`, {
+                  headers, timeout: 15000
+                });
+                const dumpRetry = subRespRetry.data.submissions_dump || [];
+                for (const sub of dumpRetry) {
+                  const slug = sub.title_slug;
+                  const isAccepted = sub.status_display === 'Accepted';
+                  const existing = submissionMap.get(slug);
+                  if (!existing) {
+                    submissionMap.set(slug, { titleSlug: slug, timestamp: sub.timestamp, status: isAccepted ? 'solved' : 'attempted' });
+                  } else if (isAccepted && existing.status !== 'solved') {
+                    existing.status = 'solved';
+                    existing.timestamp = sub.timestamp;
+                  }
+                }
+                if (dumpRetry.length === 0) hasNext = false;
+                else hasNext = subRespRetry.data.has_next;
+                offset += limit;
+              } catch (e2) {
+                console.error('Retry failed:', e2.message);
+                break;
+              }
+            } else {
+              break; 
+            }
           }
         }
       } else {

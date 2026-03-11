@@ -11,6 +11,7 @@ export default function GroupDetail() {
   const [loading, setLoading] = useState(true);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showAddProblem, setShowAddProblem] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   
@@ -40,6 +41,9 @@ export default function GroupDetail() {
     if (!group?.problems) return [];
     const patternSet = new Set();
     group.problems.forEach(p => {
+      if (p.topics && Array.isArray(p.topics)) {
+        p.topics.forEach(t => patternSet.add(t));
+      }
       if (p.pattern_name) patternSet.add(p.pattern_name);
     });
     return Array.from(patternSet).sort();
@@ -51,7 +55,7 @@ export default function GroupDetail() {
     
     return group.problems.filter(p => {
       // Pattern filter
-      if (activePattern !== 'all' && p.pattern_name !== activePattern) return false;
+      if (activePattern !== 'all' && !(p.topics?.includes(activePattern) || p.pattern_name === activePattern)) return false;
       
       // Difficulty filter
       if (difficultyFilter && p.difficulty !== difficultyFilter) return false;
@@ -222,9 +226,37 @@ export default function GroupDetail() {
         ))}
       </div>
 
-      {/* Advanced Filter Panel */}
+      {/* Dynamic Pattern Tabs */}
       {patterns.length > 0 && (
-        <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20 mt-4">
+        <div className="flex flex-wrap gap-3 mb-4 mt-6">
+          <button 
+            onClick={() => setActivePattern('all')}
+            className={`transition-all ${activePattern === 'all' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+          >
+            All
+          </button>
+          {patterns.map(p => (
+             <button 
+               key={p}
+               onClick={() => setActivePattern(p)}
+               className={`transition-all ${activePattern === p ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+             >
+               {p}
+             </button>
+          ))}
+        </div>
+      )}
+
+      {patterns.length > 0 && (
+        <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="mb-6 mt-4 flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+          <svg className={`w-4 h-4 transform transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          Advanced Filters
+        </button>
+      )}
+
+      {/* Advanced Filter Panel */}
+      {showAdvancedFilters && patterns.length > 0 && (
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20 animate-fade-in">
           <h3 className="text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
             Match <span className="bg-black/50 px-2 py-1 rounded text-white border border-white/10">All</span> of the following filters:
           </h3>
@@ -341,18 +373,9 @@ export default function GroupDetail() {
               </button>
             </div>
             
-            <div className="pt-2">
-              <button className="text-gray-400 hover:text-white transition-colors p-1" title="Add Filter">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-              </button>
-            </div>
           </div>
           
-          <div className="mt-6 flex justify-between items-center border-t border-white/10 pt-4">
-            <button className="text-purple-400 hover:text-purple-300 font-medium text-sm flex items-center gap-2 transition-colors">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 20.25Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-              Save as Smart List
-            </button>
+          <div className="mt-6 flex justify-end items-center border-t border-white/10 pt-4">
             <button 
               className="text-gray-400 hover:text-white font-medium text-sm flex items-center gap-2 transition-colors"
               onClick={() => { setDifficultyFilter(''); setSolvedFilter(''); setCompanyFilter(''); setActivePattern('all'); }}

@@ -1,22 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 
 export default function Problems() {
-  const [problems, setProblems] = useState([]);
-  const [patterns, setPatterns] = useState([]);
+  const [allProblems, setAllProblems] = useState([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activePattern, setActivePattern] = useState('all');
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [solvedFilter, setSolvedFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showPatternModal, setShowPatternModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [preview, setPreview] = useState(null);
   const [addError, setAddError] = useState('');
-  const [newPatternName, setNewPatternName] = useState('');
 
   // LeetCode Import State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -27,26 +25,42 @@ export default function Problems() {
   const [importError, setImportError] = useState('');
 
   const fetchProblems = () => {
-    const params = new URLSearchParams();
-    if (activePattern !== 'all') params.append('pattern', activePattern);
-    if (difficultyFilter) params.append('difficulty', difficultyFilter);
-    if (solvedFilter) params.append('solved', solvedFilter);
-    if (companyFilter) params.append('company', companyFilter);
-
-    api.get(`/problems?${params.toString()}`)
-      .then(res => setProblems(res.data))
+    setLoading(true);
+    api.get('/problems')
+      .then(res => setAllProblems(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    api.get('/patterns').then(res => setPatterns(res.data)).catch(console.error);
+    fetchProblems();
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchProblems();
-  }, [activePattern, difficultyFilter, solvedFilter, companyFilter]);
+  // Compute dynamic topic tabs from all problems
+  const dynamicPatterns = useMemo(() => {
+    const topicSet = new Set();
+    allProblems.forEach(p => {
+      if (p.topics && Array.isArray(p.topics)) {
+        p.topics.forEach(t => topicSet.add(t));
+      }
+      if (p.pattern_name) {
+        topicSet.add(p.pattern_name); // Legacy fallback
+      }
+    });
+    return Array.from(topicSet).sort();
+  }, [allProblems]);
+
+  // Apply filters on the frontend
+  const problems = useMemo(() => {
+    return allProblems.filter(p => {
+      const matchPattern = activePattern === 'all' || 
+                           (p.topics?.includes(activePattern) || p.pattern_name === activePattern);
+      const matchDifficulty = !difficultyFilter || p.difficulty === difficultyFilter;
+      const matchSolved = !solvedFilter || p.status === solvedFilter;
+      const matchCompany = !companyFilter || p.companies?.includes(companyFilter);
+      return matchPattern && matchDifficulty && matchSolved && matchCompany;
+    });
+  }, [allProblems, activePattern, difficultyFilter, solvedFilter, companyFilter]);
 
   let searchTimeout = null;
 
@@ -104,7 +118,7 @@ export default function Problems() {
   const handleToggle = async (problemId) => {
     try {
       const res = await api.post(`/problems/${problemId}/toggle`);
-      setProblems(prev => prev.map(p => 
+      setAllProblems(prev => prev.map(p => 
         p.id === problemId ? { ...p, solved: res.data.solved, status: res.data.status } : p
       ));
     } catch (err) {
@@ -116,23 +130,10 @@ export default function Problems() {
     if (window.confirm(`Are you sure you want to delete "${problemTitle}" from the tracker?`)) {
       try {
         await api.delete(`/problems/${problemId}`);
-        setProblems(prev => prev.filter(p => p.id !== problemId));
-        api.get('/patterns').then(res => setPatterns(res.data)).catch(console.error);
+        setAllProblems(prev => prev.filter(p => p.id !== problemId));
       } catch (err) {
         console.error('Failed to delete problem', err);
       }
-    }
-  };
-
-  const handleAddPattern = async () => {
-    if (!newPatternName.trim()) return;
-    try {
-      const res = await api.post('/patterns', { name: newPatternName.trim() });
-      setPatterns(prev => [...prev, res.data]);
-      setNewPatternName('');
-      setShowPatternModal(false);
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -194,8 +195,33 @@ export default function Problems() {
       </div>
 
 
+      {/* Dynamic Pattern Tabs */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        <button 
+          onClick={() => setActivePattern('all')}
+          className={`transition-all ${activePattern === 'all' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+        >
+          All
+        </button>
+        {dynamicPatterns.map(p => (
+           <button 
+             key={p}
+             onClick={() => setActivePattern(p)}
+             className={`transition-all ${activePattern === p ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+           >
+             {p}
+           </button>
+        ))}
+      </div>
+
+      <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="mb-6 flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+        <svg className={`w-4 h-4 transform transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        Advanced Filters
+      </button>
+
       {/* Advanced Filter Panel */}
-      <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20">
+      {showAdvancedFilters && (
+      <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20 animate-fade-in">
         <h3 className="text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
           Match <span className="bg-black/50 px-2 py-1 rounded text-white border border-white/10">All</span> of the following filters:
         </h3>
@@ -274,7 +300,7 @@ export default function Problems() {
               onChange={e => setActivePattern(e.target.value || 'all')}
             >
               <option value="">Any Topic</option>
-              {patterns.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              {dynamicPatterns.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setActivePattern('all')}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
@@ -313,18 +339,9 @@ export default function Problems() {
             </button>
           </div>
           
-          <div className="pt-2">
-            <button className="text-gray-400 hover:text-white transition-colors p-1" title="Add Filter">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-            </button>
-          </div>
         </div>
         
-        <div className="mt-6 flex justify-between items-center border-t border-white/10 pt-4">
-          <button className="text-purple-400 hover:text-purple-300 font-medium text-sm flex items-center gap-2 transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 0 0 2.25-2.25V6a2.25 2.25 0 0 0-2.25-2.25H6A2.25 2.25 0 0 0 3.75 6v2.25A2.25 2.25 0 0 0 6 10.5Zm0 9.75h2.25A2.25 2.25 0 0 0 10.5 18v-2.25a2.25 2.25 0 0 0-2.25-2.25H6a2.25 2.25 0 0 0-2.25 2.25V18A2.25 2.25 0 0 0 6 20.25Zm9.75-9.75H18a2.25 2.25 0 0 0 2.25-2.25V6A2.25 2.25 0 0 0 18 3.75h-2.25A2.25 2.25 0 0 0 13.5 6v2.25a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>
-            Save as Smart List
-          </button>
+        <div className="mt-6 flex justify-end items-center border-t border-white/10 pt-4">
           <button 
             className="text-gray-400 hover:text-white font-medium text-sm flex items-center gap-2 transition-colors"
             onClick={() => { setDifficultyFilter(''); setSolvedFilter(''); setCompanyFilter(''); setActivePattern('all'); }}
@@ -334,6 +351,7 @@ export default function Problems() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Problem List */}
       {loading ? (

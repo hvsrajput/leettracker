@@ -86,30 +86,18 @@ export default function Heatmap({ data }) {
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-lg shadow-black/30 w-full animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-            </svg>
-            Activity Graph
-          </h2>
-          <p className="text-gray-400 text-sm mt-1">{totalContributions} submission{totalContributions !== 1 ? 's' : ''} in {selectedYear}</p>
-        </div>
-        
-        <select 
-          value={selectedYear} 
-          onChange={e => setSelectedYear(parseInt(e.target.value))}
-          className="bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-gray-200 outline-none focus:border-indigo-500 hover:border-white/20 transition-all cursor-pointer backdrop-blur-md"
-        >
-          {Array.from({ length: 5 }).map((_, i) => {
-            const year = new Date().getFullYear() - i;
-            return <option key={year} value={year}>{year}</option>;
-          })}
-        </select>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+          </svg>
+          Activity Graph
+        </h2>
+        <p className="text-gray-400 text-sm mt-1">{totalContributions} submission{totalContributions !== 1 ? 's' : ''} in {selectedYear}</p>
       </div>
 
-      <div className="flex justify-center mt-6 overflow-x-auto pb-4 custom-scrollbar">
+      <div className="flex flex-col lg:flex-row items-start w-full">
+        <div className="w-full flex justify-center overflow-hidden pb-4">
         <div className="relative min-w-max">
           {/* Months Header */}
           <div className="flex relative h-6 text-xs font-medium text-gray-500">
@@ -170,6 +158,24 @@ export default function Heatmap({ data }) {
               <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-[4.5px] rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-white/10"></div>
             </div>
           )}
+        </div>
+        </div>
+        
+        {/* Vertical Year Selector */}
+        <div className="flex lg:flex-col flex-row gap-2 lg:ml-8 mt-4 lg:mt-0 overflow-x-auto w-full lg:w-auto">
+          {Array.from({ length: 5 }).map((_, i) => {
+            const year = new Date().getFullYear() - i;
+            const isActive = selectedYear === year;
+            return (
+              <button
+                key={year}
+                onClick={() => setSelectedYear(year)}
+                className={`text-sm transition-colors text-left ${isActive ? 'bg-blue-600 text-white rounded-lg px-3 py-1' : 'text-neutral-400 hover:text-white px-3 py-1'}`}
+              >
+                {year}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
