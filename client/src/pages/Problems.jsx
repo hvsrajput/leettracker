@@ -397,59 +397,120 @@ export default function Problems() {
           </div>
         </div>
       )}
-
-      {/* Import Modal */}
+          {/* Connect LeetCode Modal */}
       {showImportModal && (
-        <div className="modal-overlay backdrop-blur-sm transition-all duration-300" onClick={() => !isImporting && setShowImportModal(false)}>
-          <div className="modal-content shadow-2xl shadow-green-900/20" onClick={e => e.stopPropagation()}>
-            <h2>Import from LeetCode</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Enter your LeetCode username to automatically import your mostly recently accepted submissions (up to 20).
-            </p>
-            <div className="form-group">
-              <label>LeetCode Username (Public profile)</label>
-              <input
-                type="text"
-                value={lcUsername}
-                onChange={e => setLcUsername(e.target.value)}
-                placeholder="e.g. hvsrajput"
+        <div className="modal-overlay backdrop-blur-sm transition-all duration-300 flex items-center justify-center z-50 p-4" onClick={() => !isImporting && setShowImportModal(false)}>
+          <div className="modal-content shadow-2xl shadow-green-900/20 max-w-lg w-full rounded-2xl border border-[var(--border-color)] bg-[var(--bg-card)] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="bg-[var(--bg-tertiary)] p-6 border-b border-[var(--border-light)] relative">
+              <button 
+                onClick={() => !isImporting && setShowImportModal(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors"
                 disabled={isImporting}
-                onKeyDown={e => e.key === 'Enter' && handleImport()}
-              />
-            </div>
-            <div className="form-group mt-2">
-              <label className="text-sm! text-gray-300!">Full "Cookie" Header (Optional, bypasses 20 limit!)</label>
-              <input
-                type="password"
-                value={lcSessionCookie}
-                onChange={e => setLcSessionCookie(e.target.value)}
-                placeholder="Paste the 'Cookie' header here"
-                disabled={isImporting}
-                onKeyDown={e => e.key === 'Enter' && handleImport()}
-              />
-              <p className="text-xs text-gray-500 mt-1">To import ALL problems: Open LeetCode, F12 &gt; Network Tab &gt; Refresh &gt; Click any request &gt; scroll down to Request Headers and copy the ENTIRE "Cookie:" string value.</p>
-            </div>
-            {importError && <div className="auth-error mt-4">{importError}</div>}
-            {importResult && <div className="text-green-500 mb-4 mt-4">{importResult}</div>}
-            <div className="form-actions mt-4">
-              <button className="btn btn-secondary" onClick={() => setShowImportModal(false)} disabled={isImporting}>
-                Close
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
-              <button className="btn btn-primary flex items-center justify-center gap-2" onClick={handleImport} disabled={isImporting || (!lcUsername.trim() && !lcSessionCookie.trim())}>
-                {isImporting ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Importing...
-                  </>
-                ) : 'Import'}
-              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FFA116]/10 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-[#FFA116]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.105 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.939 5.939 0 0 0 1.271 1.541 5.995 5.995 0 0 0 .678.463 6.115 6.115 0 0 0 1.08.452 6.324 6.324 0 0 0 1.954.218 6.426 6.426 0 0 0 1.109-.134 6.55 6.55 0 0 0 1.97-.68 6.57 6.57 0 0 0 .445-.278 6.643 6.643 0 0 0 .848-.731l6.19-6.6a1.365 1.365 0 0 0 .408-.98 1.353 1.353 0 0 0-.411-.986l-2.092-2.228a1.354 1.354 0 0 0-.974-.423 1.366 1.366 0 0 0-.966.428l-5.694 6.07a1.27 1.27 0 0 1-.9.395 1.246 1.246 0 0 1-.892-.379l-1.636-1.742a1.26 1.26 0 0 1-.378-.893 1.278 1.278 0 0 1 .378-.9l6.305-6.721A1.368 1.368 0 0 0 13.483 0zm-2.866 12.815a1.362 1.362 0 0 0-.96.44l-2.24 2.39a1.351 1.351 0 0 0-.406.983c0 .359.135.703.385.962l2.366 2.516c.26.275.617.432.993.432.378 0 .736-.157.995-.432l2.253-2.396a1.354 1.354 0 0 0 .406-.983 1.34 1.34 0 0 0-.406-.968l-2.39-2.502a1.347 1.347 0 0 0-.996-.442z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white m-0">Connect LeetCode</h2>
+                  <p className="text-gray-400 text-sm mt-1">Sync your submissions automatically</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="bg-[#161b22] border border-[var(--border-light)] rounded-xl p-4 mb-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-[#FFA116]"></div>
+                <h3 className="font-semibold text-white mb-2 text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4 text-[#FFA116]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  How to get your session cookie:
+                </h3>
+                <ol className="text-sm text-gray-400 pl-4 space-y-2 mb-0 list-decimal">
+                  <li>Log in to <a href="https://leetcode.com" target="_blank" rel="noreferrer" className="text-[#FFA116] hover:underline">leetcode.com</a> in your browser</li>
+                  <li>Right click anywhere and select <strong>Inspect</strong> (or press F12)</li>
+                  <li>Go to the <strong>Network</strong> tab and refresh the page</li>
+                  <li>Click the first request (usually `leetcode.com` or `graphql`)</li>
+                  <li>Scroll down to <strong>Request Headers</strong> and copy the entire <code className="bg-black/50 px-1.5 py-0.5 rounded text-accent-cyan">Cookie:</code> string</li>
+                </ol>
+              </div>
+
+              <div className="space-y-4">
+                <div className="form-group">
+                  <label className="text-gray-300 font-medium mb-1.5 block">LeetCode Username</label>
+                  <input
+                    type="text"
+                    value={lcUsername}
+                    onChange={e => setLcUsername(e.target.value)}
+                    placeholder="e.g. hvsrajput"
+                    className="w-full bg-[#0d1117] border border-[var(--border-light)] rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600"
+                    disabled={isImporting}
+                    onKeyDown={e => e.key === 'Enter' && handleImport()}
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label className="text-gray-300 font-medium mb-1.5 block">Session Cookie <span className="text-xs font-normal text-gray-500 ml-2">(Required for full sync)</span></label>
+                  <input
+                    type="password"
+                    value={lcSessionCookie}
+                    onChange={e => setLcSessionCookie(e.target.value)}
+                    placeholder="Paste the entire 'Cookie' header string here..."
+                    className="w-full bg-[#0d1117] border border-[var(--border-light)] rounded-lg px-4 py-2.5 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all placeholder-gray-600 font-mono text-xs"
+                    disabled={isImporting}
+                    onKeyDown={e => e.key === 'Enter' && handleImport()}
+                  />
+                </div>
+              </div>
+
+              {importError && (
+                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start gap-2">
+                  <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {importError}
+                </div>
+              )}
+              
+              {importResult && (
+                <div className="mt-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm flex items-start gap-2">
+                  <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                  {importResult}
+                </div>
+              )}
+
+              <div className="mt-8 flex gap-3">
+                <button 
+                  className="flex-1 py-2.5 px-4 rounded-lg border border-[var(--border-light)] text-gray-300 font-medium hover:bg-white/5 hover:text-white transition-colors disabled:opacity-50" 
+                  onClick={() => setShowImportModal(false)} 
+                  disabled={isImporting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="flex-[2] py-2.5 px-4 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 disabled:bg-[#FFA116]/50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,161,22,0.3)] hover:shadow-[0_0_20px_rgba(255,161,22,0.5)]" 
+                  onClick={handleImport} 
+                  disabled={isImporting || (!lcUsername.trim() && !lcSessionCookie.trim())}
+                >
+                  {isImporting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Connecting & Syncing...
+                    </>
+                  ) : (
+                    'Connect & Sync Problems'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      )}    </div>
   );
 }

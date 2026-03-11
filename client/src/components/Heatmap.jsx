@@ -1,126 +1,152 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import './Heatmap.css';
 
-
-// 1 year of data
 const WEEKS_TO_SHOW = 52;
 const DAYS_IN_WEEK = 7;
 
 export default function Heatmap({ data }) {
-  // data is an object: { 'YYYY-MM-DD': 2, 'YYYY-MM-DD': 5 }
+  const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 });
 
-  const calendarData = useMemo(() => {
+  // Generate the full historical grid data
+  const { calendarData, monthLabels, totalContributions } = useMemo(() => {
+    // We want the grid to end on the Saturday of the current week.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
+    const daysToEndOfWeek = 6 - dayOfWeek;
     
-    // Normalize today to the end of the current week (Saturday)
-    // so we get full weeks in the grid
-    const endOffset = 6 - today.getDay();
     const endDate = new Date(today);
-    endDate.setDate(today.getDate() + endOffset);
+    endDate.setDate(today.getDate() + daysToEndOfWeek);
 
-    const dates = [];
     const numDays = WEEKS_TO_SHOW * DAYS_IN_WEEK;
-    
-    // Generate dates working backwards
-    for (let i = numDays - 1; i >= 0; i--) {
-      const d = new Date(endDate);
-      d.setDate(endDate.getDate() - i);
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - numDays + 1);
+
+    const dataPoints = [];
+    const months = [];
+    let lastMonth = -1;
+    let total = 0;
+
+    // Generate days left to right, top to bottom (column by column)
+    // CSS Grid uses grid-auto-flow: column
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(startDate);
+      d.setDate(startDate.getDate() + i);
       
       const dateStr = d.toISOString().split('T')[0];
       const count = data[dateStr] || 0;
-      
-      // Don't show future dates
       const isFuture = d > today;
+      
+      if (!isFuture && count > 0) total += count;
 
-      dates.push({
+      dataPoints.push({
         date: dateStr,
+        displayDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         count: isFuture ? -1 : count,
-        dayOfWeek: d.getDay(),
-        month: d.toLocaleString('default', { month: 'short' })
+        dayOfWeek: d.getDay()
       });
-    }
 
-    return dates;
-  }, [data]);
-
-  const totalContributions = useMemo(() => {
-    return calendarData.reduce((sum, d) => sum + (d.count > 0 ? d.count : 0), 0);
-  }, [calendarData]);
-
-  // Extract month labels (only place a label when the month changes)
-  const monthLabels = useMemo(() => {
-    const labels = [];
-    let lastMonth = null;
-    
-    calendarData.forEach((day, i) => {
-      // Only check the first day of each column (Sunday)
-      if (day.dayOfWeek === 0) {
-        if (day.month !== lastMonth) {
-          labels.push({ x: Math.floor(i / 7), label: day.month });
-          lastMonth = day.month;
+      // Track months for labels (placed on the first week the month appears)
+      // i % 7 === 0 means it's Sunday (top of a column)
+      if (i % 7 === 0) {
+        const month = d.getMonth();
+        if (month !== lastMonth) {
+          months.push({ label: d.toLocaleDateString('en-US', { month: 'short' }), weekIndex: Math.floor(i / 7) });
+          lastMonth = month;
         }
       }
-    });
-    return labels;
-  }, [calendarData]);
+    }
+
+    return { calendarData: dataPoints, monthLabels: months, totalContributions: total };
+  }, [data]);
 
   const getColorClass = (count) => {
-    if (count === -1) return 'color-empty future'; // Future
+    if (count === -1) return 'color-empty future';
     if (count === 0) return 'color-empty';
-    if (count >= 4) return 'color-scale-4';
-    if (count >= 3) return 'color-scale-3';
-    if (count >= 2) return 'color-scale-2';
+    if (count >= 10) return 'color-scale-4'; // High activity
+    if (count >= 5) return 'color-scale-3'; 
+    if (count >= 2) return 'color-scale-2'; 
     return 'color-scale-1'; // 1 solve
   };
 
+  const handleMouseEnter = (e, day) => {
+    if (day.count === -1) return;
+    const rect = e.target.getBoundingClientRect();
+    const countText = day.count === 0 ? 'No submissions' : `${day.count} submission${day.count > 1 ? 's' : ''}`;
+    
+    setTooltip({
+      show: true,
+      text: `${countText} on ${day.displayDate}`,
+      x: rect.left + rect.width / 2,
+      y: rect.top - 8 // Hover strictly above the cell
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setTooltip({ show: false, text: '', x: 0, y: 0 });
+  };
+
   return (
-    <div className="heatmap-container">
-      <div className="heatmap-title-row">
-        <span className="heatmap-contribution-count">
-          {totalContributions} {totalContributions === 1 ? 'question' : 'questions'} solved in the last year
-        </span>
+    <div className="gh-heatmap-container">
+      <div className="gh-heatmap-header">
+        <h3 className="gh-heatmap-title">
+          {totalContributions} submission{totalContributions !== 1 ? 's' : ''} in the last year
+        </h3>
       </div>
 
-      <div className="heatmap-header">
-        <div className="heatmap-months">
-          {monthLabels.map((lbl, i) => (
-            <span key={i} style={{ left: `${lbl.x * 13}px` }}>
-              {lbl.label}
+      <div className="gh-heatmap-body">
+        <div className="gh-heatmap-months">
+          {monthLabels.map((m, i) => (
+            <span key={i} style={{ left: `calc(${m.weekIndex} * 14px + 14px)` }}>
+              {m.label}
             </span>
           ))}
         </div>
-      </div>
-      
-      <div className="heatmap-body">
-        <div className="heatmap-days-legend">
-          <span>Mon</span>
-          <span>Wed</span>
-          <span>Fri</span>
-        </div>
-        
-        <div className="heatmap-grid">
-          {calendarData.map((day, i) => (
-            <div 
-              key={i} 
-              className={`heatmap-cell ${getColorClass(day.count)}`}
-              title={day.count === -1 ? '' : `${day.count} ${day.count === 1 ? 'question' : 'questions'} solved that day`}
-            />
-          ))}
+
+        <div className="gh-heatmap-grid-wrapper">
+          <div className="gh-heatmap-days-legend">
+            <span>Mon</span>
+            <span>Wed</span>
+            <span>Fri</span>
+          </div>
+
+          <div className="gh-heatmap-grid">
+            {calendarData.map((day, i) => (
+              <div 
+                key={i} 
+                className={`gh-cell ${getColorClass(day.count)}`}
+                onMouseEnter={(e) => handleMouseEnter(e, day)}
+                onMouseLeave={handleMouseLeave}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="heatmap-footer">
+      <div className="gh-heatmap-footer">
         Less
-        <div className="heatmap-legend">
-          <div className="heatmap-cell color-empty" />
-          <div className="heatmap-cell color-scale-1" />
-          <div className="heatmap-cell color-scale-2" />
-          <div className="heatmap-cell color-scale-3" />
-          <div className="heatmap-cell color-scale-4" />
+        <div className="gh-legend-colors">
+          <div className="gh-cell color-empty" />
+          <div className="gh-cell color-scale-1" />
+          <div className="gh-cell color-scale-2" />
+          <div className="gh-cell color-scale-3" />
+          <div className="gh-cell color-scale-4" />
         </div>
         More
       </div>
+
+      {/* GitHub-style Tooltip */}
+      {tooltip.show && (
+        <div 
+          className="gh-tooltip"
+          style={{ 
+            left: `${tooltip.x}px`, 
+            top: `${tooltip.y}px` 
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   );
 }
