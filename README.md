@@ -4,7 +4,8 @@ A multi-user LeetCode problem tracker where users can organize and track coding 
 
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=node.js&logoColor=white)
 ![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)
+![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-FF9900?logo=aws&logoColor=white)
+![DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-4053D6?logo=amazon-dynamodb&logoColor=white)
 
 ---
 
@@ -27,8 +28,8 @@ A multi-user LeetCode problem tracker where users can organize and track coding 
 | Layer    | Technology                  |
 |----------|-----------------------------|
 | Frontend | React 19, Vite 7, Axios    |
-| Backend  | Node.js, Express 4         |
-| Database | SQLite (better-sqlite3)     |
+| Backend  | Node.js, Express on AWS Lambda |
+| Database | Amazon DynamoDB (Single Table) |
 | Auth     | JWT (jsonwebtoken, bcryptjs)|
 | Styling  | Vanilla CSS, Inter font     |
 
@@ -60,15 +61,20 @@ Create a `.env` file (see `.env.example`):
 ```env
 JWT_SECRET=your-secret-key-here
 PORT=5000
+AWS_REGION=ap-south-1
+DYNAMODB_TABLE=LeetTrackerTable
+S3_BACKUP_BUCKET=leettracker-backups
 ```
 
-Seed the database:
+*(Note: If running locally without an IAM role, also add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).*
+
+Seed the DynamoDB table with default patterns:
 
 ```bash
 npm run seed
 ```
 
-Start the server:
+Start the local Express server:
 
 ```bash
 npm start
@@ -81,7 +87,7 @@ cd client
 npm install
 ```
 
-Create a `.env` file (see `.env.example`):
+Create a `.env` file pointing to your local server (or AWS API Gateway URL):
 
 ```env
 VITE_API_URL=http://localhost:5000/api
@@ -93,9 +99,15 @@ Start the dev server:
 npm run dev
 ```
 
-### 4. Open the app
+### 4. Deploying to Production
 
-Visit **http://localhost:5173** in your browser, register an account, and start tracking!
+The app is built for **zero-cost serverless** deployment:
+- **Frontend**: Deploy to Vercel (free tier)
+- **Backend API**: Package with `npm run package` and deploy to AWS Lambda
+- **Database**: AWS DynamoDB (on-demand capacity)
+- **Automated Backup**: AWS EventBridge scheduling Lambda to upload JSON to S3
+
+Check out [`DEPLOY.md`](./DEPLOY.md) for full deployment instructions, or simply run `./deploy.sh` to automatically push changes to AWS and Vercel.
 
 ---
 
@@ -104,7 +116,10 @@ Visit **http://localhost:5173** in your browser, register an account, and start 
 ```
 leettracker/
 ├── server/
-│   ├── index.js                # Express entry point
+│   ├── index.js                # Express local entry & app logic
+│   ├── lambda.js               # AWS Lambda handler (API endpoint)
+│   ├── lambda-backup.js        # AWS Lambda handler (Scheduled EventBridge backup)
+│   ├── backup.js               # S3 Backup logic
 │   ├── middleware/auth.js       # JWT verification
 │   ├── routes/
 │   │   ├── auth.js             # Register, login, me
@@ -114,11 +129,12 @@ leettracker/
 │   │   └── dashboard.js        # Aggregated stats
 │   ├── data/problems.json      # 150+ curated LC problems
 │   ├── db/
-│   │   ├── schema.sql          # SQLite schema
-│   │   └── seed.js             # Seed script
+│   │   ├── dynamodb.js         # DynamoDB client & helpers
+│   │   └── seed-dynamodb.js    # Seed script for patterns
 │   ├── .env.example
 │   └── package.json
 ├── client/
+│   ├── vercel.json             # Vercel SPA routing rules
 │   └── src/
 │       ├── api/index.js        # Axios + JWT interceptor
 │       ├── context/AuthContext.jsx
@@ -133,6 +149,8 @@ leettracker/
 │       │   ├── Groups.jsx
 │       │   └── GroupDetail.jsx
 │       └── index.css           # Design system
+├── DEPLOY.md                   # Full AWS + Vercel deployment guide
+├── deploy.sh                   # Automated deployment shell script
 ├── .gitignore
 └── README.md
 ```

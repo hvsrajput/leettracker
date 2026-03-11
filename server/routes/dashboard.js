@@ -1,71 +1,116 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
+const { queryItems, scanItems } = require('../db/dynamodb');
 
 const router = express.Router();
 
-module.exports = function(db) {
-  router.get('/', auth, (req, res) => {
-    // Total solved
-    const totalSolved = db.prepare(
-      'SELECT COUNT(*) as count FROM user_progress WHERE user_id = ? AND solved = 1'
-    ).get(req.userId).count;
+module.exports = function () {
+  router.get('/', auth, async (req, res) => {
+    try {
+      // Get all problems
+      const problems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
+      );
 
-    const totalProblems = db.prepare('SELECT COUNT(*) as count FROM problems').get().count;
+      // Get user progress
+      const progressItems = await queryItems(`PROGRESS#${req.userId}`, 'PROB#');
+      const progressMap = {};
+      progressItems.forEach(p => {
+        const lcNum = p.SK.replace('PROB#', '');
+        progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt };
+      });
 
-    // Pattern-wise breakdown
-    const patternStats = db.prepare(`
-      SELECT pat.name,
-        COUNT(DISTINCT p.id) as total,
-        COUNT(DISTINCT CASE WHEN up.solved = 1 THEN p.id END) as solved
-      FROM patterns pat
-      LEFT JOIN problems p ON p.pattern_id = pat.id
-      LEFT JOIN user_progress up ON up.problem_id = p.id AND up.user_id = ?
-      WHERE p.id IS NOT NULL
-      GROUP BY pat.id, pat.name
-      ORDER BY pat.name ASC
-    `).all(req.userId);
+      const totalProblems = problems.length;
+      let totalSolved = 0;
 
-    // Difficulty breakdown
-    const difficultyStats = db.prepare(`
-      SELECT p.difficulty,
-        COUNT(DISTINCT p.id) as total,
-        COUNT(DISTINCT CASE WHEN up.solved = 1 THEN p.id END) as solved
-      FROM problems p
-      LEFT JOIN user_progress up ON up.problem_id = p.id AND up.user_id = ?
-      GROUP BY p.difficulty
-    `).all(req.userId);
+      // Pattern-wise and difficulty-wise breakdown
+      const patternMap = {};
+      const difficultyMap = {};
 
-    // Group progress
-    const groupStats = db.prepare(`
-      SELECT g.id, g.name,
-        (SELECT COUNT(*) FROM group_problems gp WHERE gp.group_id = g.id) as total_problems,
-        (SELECT COUNT(*) FROM group_problems gp 
-         JOIN user_progress up ON up.problem_id = gp.problem_id AND up.user_id = ? AND up.solved = 1
-         WHERE gp.group_id = g.id) as solved_problems,
-        (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) as member_count
-      FROM groups_ g
-      JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
-      ORDER BY g.created_at DESC
-    `).all(req.userId, req.userId);
+      problems.forEach(p => {
+        const isSolved = progressMap[String(p.leetcodeNumber)]?.solved === 1;
+        if (isSolved) totalSolved++;
 
-    // Recent activity
-    const recentSolved = db.prepare(`
-      SELECT p.leetcode_number, p.title, p.difficulty, up.solved_at
-      FROM user_progress up
-      JOIN problems p ON p.id = up.problem_id
-      WHERE up.user_id = ? AND up.solved = 1
-      ORDER BY up.solved_at DESC
-      LIMIT 10
-    `).all(req.userId);
+        // Pattern stats
+        if (p.patternName) {
+          if (!patternMap[p.patternName]) {
+            patternMap[p.patternName] = { name: p.patternName, total: 0, solved: 0 };
+          }
+          patternMap[p.patternName].total++;
+          if (isSolved) patternMap[p.patternName].solved++;
+        }
 
-    res.json({
-      totalSolved,
-      totalProblems,
-      patternStats,
-      difficultyStats,
-      groupStats,
-      recentSolved
-    });
+        // Difficulty stats
+        if (p.difficulty) {
+          if (!difficultyMap[p.difficulty]) {
+            difficultyMap[p.difficulty] = { difficulty: p.difficulty, total: 0, solved: 0 };
+          }
+          difficultyMap[p.difficulty].total++;
+          if (isSolved) difficultyMap[p.difficulty].solved++;
+        }
+      });
+
+      const patternStats = Object.values(patternMap).sort((a, b) => a.name.localeCompare(b.name));
+      const difficultyStats = Object.values(difficultyMap);
+
+      // Group progress
+      const userGroups = await queryItems(`USERGROUP#${req.userId}`, 'GROUP#');
+      const groupStats = [];
+
+      for (const ug of userGroups) {
+        const groupId = ug.SK.replace('GROUP#', '');
+        const detail = await queryItems(`GROUP#${groupId}`, 'DETAIL');
+        if (!detail.length) continue;
+
+        const groupProblems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
+        const memberItems = await queryItems(`GROUP#${groupId}`, 'MEMBER#');
+
+        // Count solved by user
+        let solvedCount = 0;
+        for (const gp of groupProblems) {
+          const lcNum = gp.SK.replace('PROBLEM#', '');
+          if (progressMap[lcNum]?.solved === 1) solvedCount++;
+        }
+
+        groupStats.push({
+          id: groupId,
+          name: detail[0].name,
+          total_problems: groupProblems.length,
+          solved_problems: solvedCount,
+          member_count: memberItems.length,
+        });
+      }
+
+      // Recent activity — filter progress for solved items and sort
+      const recentSolved = [];
+      for (const [lcNum, prog] of Object.entries(progressMap)) {
+        if (prog.solved === 1) {
+          const problem = problems.find(p => String(p.leetcodeNumber) === lcNum);
+          if (problem) {
+            recentSolved.push({
+              leetcode_number: problem.leetcodeNumber,
+              title: problem.title,
+              difficulty: problem.difficulty,
+              solved_at: prog.solvedAt,
+            });
+          }
+        }
+      }
+      recentSolved.sort((a, b) => new Date(b.solved_at) - new Date(a.solved_at));
+
+      res.json({
+        totalSolved,
+        totalProblems,
+        patternStats,
+        difficultyStats,
+        groupStats,
+        recentSolved: recentSolved.slice(0, 10),
+      });
+    } catch (err) {
+      console.error('Dashboard error:', err);
+      res.status(500).json({ error: 'Failed to load dashboard' });
+    }
   });
 
   return router;

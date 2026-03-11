@@ -1,6 +1,6 @@
 const express = require('express');
-const path = require('path');
 const { auth } = require('../middleware/auth');
+const { putItem, getItem, queryItems, scanItems, updateItem } = require('../db/dynamodb');
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const problemsDataset = require('../data/problems.json');
 const datasetMap = new Map();
 problemsDataset.forEach(p => datasetMap.set(p.number, p));
 
-module.exports = function(db) {
+module.exports = function () {
   // Lookup problem metadata from dataset (preview before adding)
   router.get('/lookup/:number', auth, (req, res) => {
     const num = parseInt(req.params.number);
@@ -21,102 +21,169 @@ module.exports = function(db) {
   });
 
   // Get problems with filters
-  router.get('/', auth, (req, res) => {
-    const { pattern, difficulty, solved } = req.query;
-    
-    let query = `
-      SELECT p.*, pat.name as pattern_name,
-        COALESCE(up.solved, 0) as solved
-      FROM problems p
-      LEFT JOIN patterns pat ON p.pattern_id = pat.id
-      LEFT JOIN user_progress up ON up.problem_id = p.id AND up.user_id = ?
-      WHERE 1=1
-    `;
-    const params = [req.userId];
+  router.get('/', auth, async (req, res) => {
+    try {
+      const { pattern, difficulty, solved } = req.query;
 
-    if (pattern && pattern !== 'all') {
-      query += ' AND pat.name = ?';
-      params.push(pattern);
-    }
-    if (difficulty) {
-      query += ' AND p.difficulty = ?';
-      params.push(difficulty);
-    }
-    if (solved === 'true') {
-      query += ' AND COALESCE(up.solved, 0) = 1';
-    } else if (solved === 'false') {
-      query += ' AND COALESCE(up.solved, 0) = 0';
-    }
+      // Get all problems
+      let problems = await scanItems(
+        'begins_with(PK, :prefix) AND SK = :sk',
+        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
+      );
 
-    query += ' ORDER BY p.leetcode_number ASC';
-    const problems = db.prepare(query).all(...params);
-    res.json(problems);
+      // Apply filters
+      if (pattern && pattern !== 'all') {
+        problems = problems.filter(p => p.patternName === pattern);
+      }
+      if (difficulty) {
+        problems = problems.filter(p => p.difficulty === difficulty);
+      }
+
+      // Get user progress for all problems
+      const progressItems = await queryItems(`PROGRESS#${req.userId}`, 'PROB#');
+      const progressMap = {};
+      progressItems.forEach(p => {
+        const lcNum = p.SK.replace('PROB#', '');
+        progressMap[lcNum] = p.solved;
+      });
+
+      // Attach solved status
+      let result = problems.map(p => ({
+        id: p.leetcodeNumber, // Use leetcode number as ID
+        leetcode_number: p.leetcodeNumber,
+        title: p.title,
+        difficulty: p.difficulty,
+        url: p.url,
+        pattern_name: p.patternName || null,
+        added_by: p.addedBy,
+        created_at: p.createdAt,
+        solved: progressMap[String(p.leetcodeNumber)] || 0,
+      }));
+
+      // Filter by solved status
+      if (solved === 'true') {
+        result = result.filter(p => p.solved === 1);
+      } else if (solved === 'false') {
+        result = result.filter(p => p.solved === 0 || !p.solved);
+      }
+
+      // Sort by leetcode number
+      result.sort((a, b) => a.leetcode_number - b.leetcode_number);
+
+      res.json(result);
+    } catch (err) {
+      console.error('Get problems error:', err);
+      res.status(500).json({ error: 'Failed to get problems' });
+    }
   });
 
   // Add problem by LeetCode number
-  router.post('/', auth, (req, res) => {
-    const { leetcode_number, title: manualTitle, difficulty: manualDiff, url: manualUrl, pattern_name } = req.body;
-    const num = parseInt(leetcode_number);
-    if (!num) {
-      return res.status(400).json({ error: 'LeetCode number is required' });
+  router.post('/', auth, async (req, res) => {
+    try {
+      const { leetcode_number, title: manualTitle, difficulty: manualDiff, url: manualUrl, pattern_name } = req.body;
+      const num = parseInt(leetcode_number);
+      if (!num) {
+        return res.status(400).json({ error: 'LeetCode number is required' });
+      }
+
+      // Check if already exists
+      const existing = await getItem(`PROBLEM#${num}`, 'DETAIL');
+      if (existing) {
+        return res.status(400).json({
+          error: 'Problem already added',
+          problem: {
+            id: existing.leetcodeNumber,
+            leetcode_number: existing.leetcodeNumber,
+            title: existing.title,
+            difficulty: existing.difficulty,
+            url: existing.url,
+            pattern_name: existing.patternName,
+          },
+        });
+      }
+
+      // Lookup from dataset
+      const data = datasetMap.get(num);
+      const title = data ? data.title : (manualTitle || `Problem ${num}`);
+      const difficulty = data ? data.difficulty : (manualDiff || 'Medium');
+      const url = data ? data.url : (manualUrl || `https://leetcode.com/problems/problem-${num}/`);
+
+      // Determine pattern name
+      let patternName = null;
+      if (pattern_name) {
+        patternName = pattern_name;
+      } else if (data && data.topics && data.topics.length > 0) {
+        patternName = data.topics[0];
+      }
+
+      const createdAt = new Date().toISOString();
+
+      await putItem({
+        PK: `PROBLEM#${num}`,
+        SK: 'DETAIL',
+        leetcodeNumber: num,
+        title,
+        difficulty,
+        url,
+        patternName,
+        addedBy: req.userId,
+        createdAt,
+      });
+
+      res.json({
+        id: num,
+        leetcode_number: num,
+        title,
+        difficulty,
+        url,
+        pattern_name: patternName,
+        added_by: req.userId,
+        created_at: createdAt,
+      });
+    } catch (err) {
+      console.error('Add problem error:', err);
+      res.status(500).json({ error: 'Failed to add problem' });
     }
-
-    // Check if already exists
-    const existing = db.prepare('SELECT * FROM problems WHERE leetcode_number = ?').get(num);
-    if (existing) {
-      return res.status(400).json({ error: 'Problem already added', problem: existing });
-    }
-
-    // Lookup from dataset
-    const data = datasetMap.get(num);
-    const title = data ? data.title : (manualTitle || `Problem ${num}`);
-    const difficulty = data ? data.difficulty : (manualDiff || 'Medium');
-    const url = data ? data.url : (manualUrl || `https://leetcode.com/problems/problem-${num}/`);
-    
-    // Determine pattern
-    let patternId = null;
-    if (pattern_name) {
-      const pat = db.prepare('SELECT id FROM patterns WHERE name = ?').get(pattern_name);
-      if (pat) patternId = pat.id;
-    } else if (data && data.topics && data.topics.length > 0) {
-      // Use first topic from dataset
-      const pat = db.prepare('SELECT id FROM patterns WHERE name = ?').get(data.topics[0]);
-      if (pat) patternId = pat.id;
-    }
-
-    const result = db.prepare(
-      'INSERT INTO problems (leetcode_number, title, difficulty, url, pattern_id, added_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(num, title, difficulty, url, patternId, req.userId);
-
-    const problem = db.prepare(`
-      SELECT p.*, pat.name as pattern_name 
-      FROM problems p 
-      LEFT JOIN patterns pat ON p.pattern_id = pat.id 
-      WHERE p.id = ?
-    `).get(result.lastInsertRowid);
-
-    res.json(problem);
   });
 
   // Toggle solved status
-  router.post('/:id/toggle', auth, (req, res) => {
-    const problemId = parseInt(req.params.id);
-    const problem = db.prepare('SELECT id FROM problems WHERE id = ?').get(problemId);
-    if (!problem) {
-      return res.status(404).json({ error: 'Problem not found' });
-    }
+  router.post('/:id/toggle', auth, async (req, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
 
-    const existing = db.prepare('SELECT * FROM user_progress WHERE user_id = ? AND problem_id = ?').get(req.userId, problemId);
-    
-    if (existing) {
-      const newSolved = existing.solved ? 0 : 1;
-      db.prepare('UPDATE user_progress SET solved = ?, solved_at = ? WHERE user_id = ? AND problem_id = ?')
-        .run(newSolved, newSolved ? new Date().toISOString() : null, req.userId, problemId);
-      res.json({ solved: newSolved });
-    } else {
-      db.prepare('INSERT INTO user_progress (user_id, problem_id, solved, solved_at) VALUES (?, ?, 1, ?)')
-        .run(req.userId, problemId, new Date().toISOString());
-      res.json({ solved: 1 });
+      // Check problem exists
+      const problem = await getItem(`PROBLEM#${problemId}`, 'DETAIL');
+      if (!problem) {
+        return res.status(404).json({ error: 'Problem not found' });
+      }
+
+      // Check current progress
+      const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${problemId}`);
+
+      if (progress) {
+        const newSolved = progress.solved ? 0 : 1;
+        await updateItem(
+          `PROGRESS#${req.userId}`,
+          `PROB#${problemId}`,
+          'SET solved = :s, solvedAt = :sa',
+          {
+            ':s': newSolved,
+            ':sa': newSolved ? new Date().toISOString() : null,
+          }
+        );
+        res.json({ solved: newSolved });
+      } else {
+        await putItem({
+          PK: `PROGRESS#${req.userId}`,
+          SK: `PROB#${problemId}`,
+          solved: 1,
+          solvedAt: new Date().toISOString(),
+        });
+        res.json({ solved: 1 });
+      }
+    } catch (err) {
+      console.error('Toggle error:', err);
+      res.status(500).json({ error: 'Failed to toggle problem status' });
     }
   });
 
