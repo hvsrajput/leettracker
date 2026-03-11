@@ -126,99 +126,40 @@ module.exports = function () {
     }
 
     try {
-      // Build a map: slug -> { bestStatus, timestamp }
-      const submissionMap = new Map();
-      
-      if (sessionCookie) {
-        const cookieHeader = sessionCookie.includes('LEETCODE_SESSION=')
-          ? sessionCookie
-          : `LEETCODE_SESSION=${sessionCookie}`;
-
-        // Extract csrftoken from the cookie string
-        let csrfToken = '';
-        const csrfMatch = cookieHeader.match(/csrftoken=([^;\s]+)/);
-        if (csrfMatch) csrfToken = csrfMatch[1];
-
-        const headers = {
-          'Content-Type': 'application/json',
-          'Cookie': cookieHeader,
-          'Referer': 'https://leetcode.com',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          ...(csrfToken && { 'x-csrftoken': csrfToken }),
-        };
-
-        // Query loop for paginated submissions
-        const query = `
-        query submissionList($offset: Int!, $limit: Int!) {
-          submissionList(offset: $offset, limit: $limit) {
-            hasNext
-            submissions {
-              titleSlug
-              statusDisplay
-            }
-          }
-        }
-      `;
-
-      let offset = 0;
-      const limit = 50;
-      let hasNext = true;
+      let solvedCount = 0;
+      let alreadyExistsCount = 0;
+      let failedCount = 0;
       const solvedSlugs = new Set();
-      let failedAuth = false;
 
-      while (hasNext) {
-        let graphqlResp;
-        try {
-          graphqlResp = await axios.post('https://leetcode.com/graphql', {
-            query,
-            variables: { offset, limit }
-          }, {
-            headers,
-            timeout: 10000
-          });
-        } catch (err) {
-          if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-            failedAuth = true;
-            break;
-          }
-          console.error("GraphQL Pagination Error:", err.message);
-          break;
-        }
-
-        const data = graphqlResp.data?.data;
-        if (!data || graphqlResp.data?.errors) {
-          failedAuth = true;
-          break;
-        }
-
-        const list = data.submissionList;
-        if (list && list.submissions) {
-          for (const sub of list.submissions) {
-            if (sub.statusDisplay === 'Accepted') {
-              solvedSlugs.add(sub.titleSlug);
+      if (sessionCookie || username) {
+        // Use public userProfileUserQuestionProgressV2 to avoid Cloudflare session/IP binding issues
+        const query = `
+          query userProfileUserQuestionProgressV2($userSlug: String!) {
+            userProfileUserQuestionProgressV2(userSlug: $userSlug) {
+              acceptedQuestionList {
+                titleSlug
+              }
             }
           }
-          hasNext = list.hasNext;
-          offset += limit;
-          
-          if (hasNext) {
-            await new Promise(r => setTimeout(r, 300));
-          }
-        } else {
-          hasNext = false;
-        }
-      }
+        `;
 
-      if (failedAuth) {
-        return res.status(401).json({ error: 'LeetCode session expired or invalid. Please re-import cookies.' });
+        const resp = await axios.post('https://leetcode.com/graphql', {
+          query,
+          variables: { userSlug: username }
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Referer': 'https://leetcode.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          timeout: 10000
+        });
+
+        const accepted = resp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
+        accepted.forEach(q => solvedSlugs.add(q.titleSlug));
       }
 
       const timestamp = new Date().toISOString();
-
-      let solvedCount = 0;
-      let attemptedCount = 0;
-      let alreadyExistsCount = 0;
-      let failedCount = 0;
 
       for (const slug of solvedSlugs) {
         try {
@@ -241,8 +182,6 @@ module.exports = function () {
           console.error(`Failed to import problem "${slug}":`, err.message);
           failedCount++;
         }
-      }
-
       }
       
       res.json({ 
