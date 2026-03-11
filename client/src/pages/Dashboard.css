@@ -32,8 +32,8 @@
 
 .stat-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   padding: 1.25rem;
   display: flex;
   align-items: center;
@@ -129,8 +129,8 @@
 
 .pattern-card {
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   padding: 0.9rem 1.1rem;
 }
 
@@ -162,7 +162,7 @@
 
 .pattern-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+  background: var(--text-primary);
   border-radius: 3px;
   transition: width 1s ease;
 }
@@ -176,8 +176,9 @@
 
 .group-stat-card h3 {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 0.75rem;
+  color: var(--text-primary);
 }
 
 .group-stat-details {
@@ -214,8 +215,8 @@
   align-items: center;
   gap: 0.75rem;
   background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   padding: 0.7rem 1rem;
   font-size: 0.85rem;
 }

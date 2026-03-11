@@ -10,6 +10,38 @@ const datasetMap = new Map();
 problemsDataset.forEach(p => datasetMap.set(p.number, p));
 
 module.exports = function () {
+  // Search problems from dataset (autocomplete)
+  router.get('/search', auth, (req, res) => {
+    const query = (req.query.q || '').toLowerCase().trim();
+    if (!query) {
+      return res.json([]);
+    }
+
+    const isNumber = !isNaN(query) && query.length > 0;
+    
+    // Filter dataset based on query matching title or number
+    let results = problemsDataset.filter(p => {
+      if (isNumber) {
+        return String(p.number).startsWith(query);
+      }
+      return p.title.toLowerCase().includes(query);
+    });
+
+    // Sort exact or prefix matches higher
+    if (!isNumber) {
+      results.sort((a, b) => {
+        const aTitle = a.title.toLowerCase();
+        const bTitle = b.title.toLowerCase();
+        const aStarts = aTitle.startsWith(query) ? 1 : 0;
+        const bStarts = bTitle.startsWith(query) ? 1 : 0;
+        return bStarts - aStarts; 
+      });
+    }
+
+    // Return top 10 results
+    res.json(results.slice(0, 10));
+  });
+
   // Lookup problem metadata from dataset (preview before adding)
   router.get('/lookup/:number', auth, (req, res) => {
     const num = parseInt(req.params.number);

@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import Heatmap from '../components/Heatmap';
 import './Dashboard.css';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [heatmapData, setHeatmapData] = useState({});
+  const [heatmapLoading, setHeatmapLoading] = useState(true);
+  const [heatmapGroup, setHeatmapGroup] = useState('me'); // 'me' or groupId
 
   useEffect(() => {
     api.get('/dashboard')
@@ -12,6 +16,14 @@ export default function Dashboard() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setHeatmapLoading(true);
+    api.get(`/dashboard/heatmap?groupId=${heatmapGroup}`)
+      .then(res => setHeatmapData(res.data))
+      .catch(console.error)
+      .finally(() => setHeatmapLoading(false));
+  }, [heatmapGroup]);
 
   if (loading) {
     return <div className="page-loading">Loading dashboard...</div>;
@@ -70,9 +82,33 @@ export default function Dashboard() {
         ))}
       </div>
 
+      {/* Heatmap Section */}
+      <div className="dashboard-section heatmap-section">
+        <div className="section-header-row">
+          <h2 className="section-title">Activity Graph</h2>
+          <div className="heatmap-controls">
+            <select 
+              value={heatmapGroup} 
+              onChange={e => setHeatmapGroup(e.target.value)}
+              className="heatmap-select"
+            >
+              <option value="me">You</option>
+              {stats.groupStats && stats.groupStats.map(g => (
+                <option key={g.id} value={g.id}>Group: {g.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {heatmapLoading ? (
+          <div className="heatmap-container heatmap-loading">Loading activity...</div>
+        ) : (
+          <Heatmap data={heatmapData} />
+        )}
+      </div>
+
       {/* Pattern Progress */}
       <div className="dashboard-section">
-        <h2 className="section-title">📚 Pattern Progress</h2>
+        <h2 className="section-title">Pattern Progress</h2>
         <div className="pattern-grid">
           {stats.patternStats && stats.patternStats.map(p => (
             <div className="pattern-card" key={p.name}>
@@ -93,7 +129,7 @@ export default function Dashboard() {
       {/* Group Progress */}
       {stats.groupStats && stats.groupStats.length > 0 && (
         <div className="dashboard-section">
-          <h2 className="section-title">👥 Group Progress</h2>
+          <h2 className="section-title">Group Progress</h2>
           <div className="group-stats-grid">
             {stats.groupStats.map(g => (
               <div className="group-stat-card card" key={g.id}>
@@ -121,7 +157,7 @@ export default function Dashboard() {
       {/* Recent Activity */}
       {stats.recentSolved && stats.recentSolved.length > 0 && (
         <div className="dashboard-section">
-          <h2 className="section-title">🏆 Recently Solved</h2>
+          <h2 className="section-title">Recently Solved</h2>
           <div className="recent-list">
             {stats.recentSolved.map((p, i) => (
               <div className="recent-item" key={i}>

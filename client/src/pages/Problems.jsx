@@ -11,9 +11,10 @@ export default function Problems() {
   const [solvedFilter, setSolvedFilter] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPatternModal, setShowPatternModal] = useState(false);
-  const [lcNumber, setLcNumber] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [newPatternName, setNewPatternName] = useState('');
 
@@ -38,30 +39,53 @@ export default function Problems() {
     fetchProblems();
   }, [activePattern, difficultyFilter, solvedFilter]);
 
-  const handleLookup = async () => {
-    if (!lcNumber) return;
-    setPreviewLoading(true);
-    setAddError('');
+  let searchTimeout = null;
+
+  const handleSearch = async (query) => {
+    setSearchQuery(query);
     setPreview(null);
-    try {
-      const res = await api.get(`/problems/lookup/${lcNumber}`);
-      setPreview(res.data);
-    } catch (err) {
-      setPreview({ number: parseInt(lcNumber), title: `Problem ${lcNumber}`, difficulty: 'Medium', url: `https://leetcode.com/problems/` });
-      setAddError('Not in dataset. You can still add with defaults.');
-    } finally {
-      setPreviewLoading(false);
+    setAddError('');
+    
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
     }
+
+    setIsSearching(true);
+    searchTimeout = setTimeout(async () => {
+      try {
+        const res = await api.get(`/problems/search?q=${encodeURIComponent(query)}`);
+        setSearchResults(res.data);
+      } catch (err) {
+        console.error('Search error', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300); // 300ms debounce
+  };
+
+  const handleSelectProblem = (prob) => {
+    setPreview(prob);
+    setSearchQuery('');
+    setSearchResults([]);
+    setAddError('');
   };
 
   const handleAddProblem = async () => {
-    if (!lcNumber) return;
+    if (!preview) return;
     setAddError('');
     try {
-      await api.post('/problems', { leetcode_number: parseInt(lcNumber) });
+      await api.post('/problems', { 
+        leetcode_number: preview.number,
+        title: preview.title,
+        difficulty: preview.difficulty,
+        pattern_name: preview.topics?.[0] || null
+      });
       setShowAddModal(false);
-      setLcNumber('');
       setPreview(null);
+      setSearchQuery('');
       fetchProblems();
     } catch (err) {
       setAddError(err.response?.data?.error || 'Failed to add problem');
@@ -208,20 +232,34 @@ export default function Problems() {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <h2>Add Problem</h2>
-            <div className="form-group">
-              <label>LeetCode Problem Number</label>
-              <div className="lookup-row">
+            <div className="form-group search-group">
+              <label>Search Problem (Title or Number)</label>
+              <div className="search-input-wrapper">
                 <input
-                  type="number"
-                  value={lcNumber}
-                  onChange={e => setLcNumber(e.target.value)}
-                  placeholder="e.g. 1, 42, 200..."
-                  onKeyDown={e => e.key === 'Enter' && handleLookup()}
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => handleSearch(e.target.value)}
+                  placeholder="e.g. Two Sum, 1..."
+                  autoComplete="off"
                 />
-                <button className="btn btn-secondary" onClick={handleLookup} disabled={previewLoading}>
-                  {previewLoading ? '...' : 'Lookup'}
-                </button>
+                {isSearching && <span className="search-spinner">...</span>}
               </div>
+              
+              {searchResults.length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {searchResults.map(res => (
+                    <div 
+                      key={res.number} 
+                      className="autocomplete-item"
+                      onClick={() => handleSelectProblem(res)}
+                    >
+                      <span className="ac-num">#{res.number}</span>
+                      <span className="ac-title">{res.title}</span>
+                      <span className={`ac-diff badge badge-${res.difficulty.toLowerCase()}`}>{res.difficulty}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {addError && <div className="auth-error">{addError}</div>}
@@ -239,10 +277,10 @@ export default function Problems() {
             )}
 
             <div className="form-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowAddModal(false); setPreview(null); setLcNumber(''); }}>
+              <button className="btn btn-secondary" onClick={() => { setShowAddModal(false); setPreview(null); setSearchQuery(''); setSearchResults([]); }}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleAddProblem} disabled={!lcNumber}>
+              <button className="btn btn-primary" onClick={handleAddProblem} disabled={!preview}>
                 Add Problem
               </button>
             </div>

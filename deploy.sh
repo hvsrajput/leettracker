@@ -42,12 +42,9 @@ echo "✅ Backend deployed to AWS!"
 cd ..
 echo ""
 
-# 3. Deploy Frontend to Vercel
-echo "🌐 STEP 3: Deploying Frontend to Vercel Production..."
-cd client
-# Run vercel CLI (installs automatically if missing)
-npx -y vercel --prod --yes
-cd ..
-
+# 3. Frontend Deployment Note
+echo "🌐 STEP 3: Frontend Deployment"
+echo "Vercel is linked to the GitHub repository and will automatically deploy the frontend when changes are pushed!"
 echo ""
-echo "🎉 ALL DONE! Frontend and Backend are successfully updated and live! 🚀"
+
+echo "🎉 ALL DONE! Backend is successfully updated and live! Vercel is handling the frontend! 🚀"

@@ -113,5 +113,47 @@ module.exports = function () {
     }
   });
 
+  // Heatmap Data Endpoint for GitHub-style graph
+  router.get('/heatmap', auth, async (req, res) => {
+    try {
+      const { groupId } = req.query;
+      let userIdsToFetch = [req.userId];
+
+      // If a group is specified, fetch all members of that group
+      if (groupId && groupId !== 'me') {
+        const members = await queryItems(`GROUP#${groupId}`, 'MEMBER#');
+        if (members.length > 0) {
+           // We need their actual user IDs (emails), but MEMBER items only store username and joinedAt.
+           // However, let's grab the member list and resolve their IDs. 
+           // For simplicity in single-table, if the current schema doesn't map username->email easily without an index, 
+           // we can scan the Users table or assume `req.userId` is the PK format (email).
+           // Wait, MEMBER items have `PK = GROUP#<id>`, `SK = MEMBER#<email>`. So the email is in the SK!
+           userIdsToFetch = members.map(m => m.SK.replace('MEMBER#', ''));
+        } else {
+           userIdsToFetch = []; // Empty group
+        }
+      }
+
+      // Aggregate all solves per date (YYYY-MM-DD)
+      const heatmapData = {};
+
+      for (const uid of userIdsToFetch) {
+        const progressItems = await queryItems(`PROGRESS#${uid}`, 'PROB#');
+        for (const p of progressItems) {
+          if (p.solved === 1 && p.solvedAt) {
+            // Extract just the date part (YYYY-MM-DD)
+            const dateStr = p.solvedAt.split('T')[0];
+            heatmapData[dateStr] = (heatmapData[dateStr] || 0) + 1;
+          }
+        }
+      }
+
+      res.json(heatmapData);
+    } catch (err) {
+      console.error('Heatmap error:', err);
+      res.status(500).json({ error: 'Failed to load heatmap data' });
+    }
+  });
+
   return router;
 };
