@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import './Heatmap.css';
 
-// 6 months of data
-const WEEKS_TO_SHOW = 26;
+// 1 year of data
+const WEEKS_TO_SHOW = 52;
 const DAYS_IN_WEEK = 7;
 
 export default function Heatmap({ data }) {
@@ -93,7 +93,7 @@ export default function Heatmap({ data }) {
             <div 
               key={i} 
               className={`heatmap-cell ${getColorClass(day.count)}`}
-              title={day.count === -1 ? '' : `${day.count} solves on ${day.date}`}
+              title={day.count === -1 ? '' : `${day.count} ${day.count === 1 ? 'question' : 'questions'} solved that day`}
             />
           ))}
         </div>
