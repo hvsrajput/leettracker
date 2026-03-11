@@ -97,7 +97,8 @@ module.exports = function () {
           created_at: p.createdAt,
           solved: progress?.solved || 0,
           status: progress?.status || 'unsolved',
-          companies: datasetEntry ? (datasetEntry.companies || []) : []
+          companies: datasetEntry ? (datasetEntry.companies || []) : [],
+          topics: datasetEntry ? (datasetEntry.topics || []) : []
         };
       });
 
@@ -210,7 +211,7 @@ module.exports = function () {
     }
   });
 
-  // Toggle solved status
+  // Toggle solved status (3 states: unsolved -> attempted -> solved -> unsolved)
   router.post('/:id/toggle', auth, async (req, res) => {
     try {
       const problemId = parseInt(req.params.id);
@@ -225,25 +226,47 @@ module.exports = function () {
       const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${problemId}`);
 
       if (progress) {
-        const newSolved = progress.solved ? 0 : 1;
+        let newStatus = 'attempted';
+        let newSolved = 0;
+        let solvedAt = null;
+
+        if (progress.status === 'unsolved' || (!progress.status && !progress.solved)) {
+          newStatus = 'attempted';
+          newSolved = 0;
+          solvedAt = null;
+        } else if (progress.status === 'attempted') {
+          newStatus = 'solved';
+          newSolved = 1;
+          solvedAt = new Date().toISOString();
+        } else if (progress.status === 'solved' || progress.solved) {
+          newStatus = 'unsolved';
+          newSolved = 0;
+          solvedAt = null;
+        }
+
         await updateItem(
           `PROGRESS#${req.userId}`,
           `PROB#${problemId}`,
-          'SET solved = :s, solvedAt = :sa',
+          'SET solved = :s, #st = :status, solvedAt = :sa',
           {
             ':s': newSolved,
-            ':sa': newSolved ? new Date().toISOString() : null,
+            ':status': newStatus,
+            ':sa': solvedAt,
+          },
+          {
+            '#st': 'status'
           }
         );
-        res.json({ solved: newSolved });
+        res.json({ solved: newSolved, status: newStatus });
       } else {
         await putItem({
           PK: `PROGRESS#${req.userId}`,
           SK: `PROB#${problemId}`,
-          solved: 1,
-          solvedAt: new Date().toISOString(),
+          solved: 0,
+          status: 'attempted',
+          solvedAt: null,
         });
-        res.json({ solved: 1 });
+        res.json({ solved: 0, status: 'attempted' });
       }
     } catch (err) {
       console.error('Toggle error:', err);

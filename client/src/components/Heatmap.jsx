@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
-import './Heatmap.css';
 
 const WEEKS_TO_SHOW = 52;
 const DAYS_IN_WEEK = 7;
 
 export default function Heatmap({ data }) {
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 });
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  // Generate the full historical grid data
   const { calendarData, monthLabels, totalContributions } = useMemo(() => {
-    // We want the grid to end on the Saturday of the current week.
-    const today = new Date();
+    // If selectedYear is current year, today is the actual date.
+    // If a past year, today is Dec 31st of that year.
+    const currentYear = new Date().getFullYear();
+    const today = selectedYear === currentYear ? new Date() : new Date(selectedYear, 11, 31);
     today.setHours(0, 0, 0, 0);
-    const dayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
+
+    const dayOfWeek = today.getDay();
     const daysToEndOfWeek = 6 - dayOfWeek;
     
     const endDate = new Date(today);
@@ -27,8 +29,6 @@ export default function Heatmap({ data }) {
     let lastMonth = -1;
     let total = 0;
 
-    // Generate days left to right, top to bottom (column by column)
-    // CSS Grid uses grid-auto-flow: column
     for (let i = 0; i < numDays; i++) {
       const d = new Date(startDate);
       d.setDate(startDate.getDate() + i);
@@ -46,8 +46,6 @@ export default function Heatmap({ data }) {
         dayOfWeek: d.getDay()
       });
 
-      // Track months for labels (placed on the first week the month appears)
-      // i % 7 === 0 means it's Sunday (top of a column)
       if (i % 7 === 0) {
         const month = d.getMonth();
         if (month !== lastMonth) {
@@ -58,15 +56,15 @@ export default function Heatmap({ data }) {
     }
 
     return { calendarData: dataPoints, monthLabels: months, totalContributions: total };
-  }, [data]);
+  }, [data, selectedYear]);
 
   const getColorClass = (count) => {
-    if (count === -1) return 'color-empty future';
-    if (count === 0) return 'color-empty';
-    if (count >= 10) return 'color-scale-4'; // High activity
-    if (count >= 5) return 'color-scale-3'; 
-    if (count >= 2) return 'color-scale-2'; 
-    return 'color-scale-1'; // 1 solve
+    if (count === -1) return 'bg-white/5 border border-white/5'; 
+    if (count === 0) return 'bg-white/5 border border-white/10';
+    if (count >= 10) return 'bg-[#39d353]';
+    if (count >= 5) return 'bg-[#26a641]'; 
+    if (count >= 2) return 'bg-[#006d32]'; 
+    return 'bg-[#0e4429]';
   };
 
   const handleMouseEnter = (e, day) => {
@@ -78,7 +76,7 @@ export default function Heatmap({ data }) {
       show: true,
       text: `${countText} on ${day.displayDate}`,
       x: rect.left + rect.width / 2,
-      y: rect.top - 8 // Hover strictly above the cell
+      y: rect.top - 8
     });
   };
 
@@ -87,66 +85,99 @@ export default function Heatmap({ data }) {
   };
 
   return (
-    <div className="gh-heatmap-container">
-      <div className="gh-heatmap-header">
-        <h3 className="gh-heatmap-title">
-          {totalContributions} submission{totalContributions !== 1 ? 's' : ''} in the last year
-        </h3>
+    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-lg shadow-black/30 w-full animate-fade-in">
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+          </svg>
+          Activity Graph
+        </h2>
+        <p className="text-gray-400 text-sm mt-1">{totalContributions} submission{totalContributions !== 1 ? 's' : ''} in {selectedYear}</p>
       </div>
 
-      <div className="gh-heatmap-body">
-        <div className="gh-heatmap-months">
-          {monthLabels.map((m, i) => (
-            <span key={i} style={{ left: `calc(${m.weekIndex} * 14px + 14px)` }}>
-              {m.label}
-            </span>
-          ))}
-        </div>
-
-        <div className="gh-heatmap-grid-wrapper">
-          <div className="gh-heatmap-days-legend">
-            <span>Mon</span>
-            <span>Wed</span>
-            <span>Fri</span>
-          </div>
-
-          <div className="gh-heatmap-grid">
-            {calendarData.map((day, i) => (
-              <div 
+      <div className="flex flex-col lg:flex-row items-start w-full">
+        <div className="w-full flex justify-center overflow-hidden pb-4">
+        <div className="relative min-w-max">
+          {/* Months Header */}
+          <div className="flex relative h-6 text-xs font-medium text-gray-500">
+            {monthLabels.map((m, i) => (
+              <span 
                 key={i} 
-                className={`gh-cell ${getColorClass(day.count)}`}
-                onMouseEnter={(e) => handleMouseEnter(e, day)}
-                onMouseLeave={handleMouseLeave}
-              />
+                className="absolute"
+                style={{ left: `calc(${m.weekIndex} * 26px)` }} // 20px cell + 6px gap
+              >
+                {m.label}
+              </span>
             ))}
           </div>
+
+          <div className="flex gap-2">
+            {/* Days Legend */}
+            <div className="grid grid-rows-7 gap-[6px] text-[10px] font-medium text-gray-500 pr-2 pt-[2px]">
+              <span className="row-start-1 h-5 flex items-center pr-2">Mon</span>
+              <span className="row-start-2 h-5 flex items-center pr-2">Tue</span>
+              <span className="row-start-3 h-5 flex items-center pr-2">Wed</span>
+              <span className="row-start-4 h-5 flex items-center pr-2">Thu</span>
+              <span className="row-start-5 h-5 flex items-center pr-2">Fri</span>
+              <span className="row-start-6 h-5 flex items-center pr-2">Sat</span>
+              <span className="row-start-7 h-5 flex items-center pr-2">Sun</span>
+            </div>
+
+            {/* Heatmap Grid */}
+            <div className="grid grid-rows-7 grid-flow-col gap-[6px]">
+              {calendarData.map((day, i) => (
+                <div 
+                  key={i} 
+                  className={`w-5 h-5 rounded-[4px] transition-all duration-200 ${getColorClass(day.count)} ${day.count !== -1 ? 'hover:ring-2 ring-white/30 cursor-crosshair hover:scale-[1.15]' : ''}`}
+                  onMouseEnter={(e) => handleMouseEnter(e, day)}
+                  onMouseLeave={handleMouseLeave}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Legend Footer */}
+          <div className="flex items-center justify-end gap-2 mt-5 text-xs font-medium text-gray-500">
+            <span>Less</span>
+            <div className="w-3 h-3 rounded-[3px] bg-white/5 border border-white/10" />
+            <div className="w-3 h-3 rounded-[3px] bg-[#0e4429]" />
+            <div className="w-3 h-3 rounded-[3px] bg-[#006d32]" />
+            <div className="w-3 h-3 rounded-[3px] bg-[#26a641]" />
+            <div className="w-3 h-3 rounded-[3px] bg-[#39d353]" />
+            <span>More</span>
+          </div>
+
+          {/* Tooltip Overlay */}
+          {tooltip.show && (
+            <div 
+              className="fixed z-50 bg-neutral-900 text-gray-100 text-xs py-2 px-3 rounded-lg shadow-xl shadow-black/50 border border-white/10 backdrop-blur-md pointer-events-none transform -translate-x-1/2 -translate-y-[calc(100%+8px)] font-medium whitespace-nowrap"
+              style={{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }}
+            >
+              {tooltip.text}
+              <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-[4.5px] rotate-45 w-2 h-2 bg-neutral-900 border-r border-b border-white/10"></div>
+            </div>
+          )}
+        </div>
+        </div>
+        
+        {/* Vertical Year Selector */}
+        <div className="flex lg:flex-col flex-row gap-2 lg:ml-8 mt-4 lg:mt-0 overflow-x-auto w-full lg:w-auto">
+          {Array.from({ length: 5 }).map((_, i) => {
+            const year = new Date().getFullYear() - i;
+            const isActive = selectedYear === year;
+            return (
+              <button
+                key={year}
+                onClick={() => setSelectedYear(year)}
+                className={`text-sm transition-colors text-left ${isActive ? 'bg-blue-600 text-white rounded-lg px-3 py-1' : 'text-neutral-400 hover:text-white px-3 py-1'}`}
+              >
+                {year}
+              </button>
+            );
+          })}
         </div>
       </div>
-
-      <div className="gh-heatmap-footer">
-        Less
-        <div className="gh-legend-colors">
-          <div className="gh-cell color-empty" />
-          <div className="gh-cell color-scale-1" />
-          <div className="gh-cell color-scale-2" />
-          <div className="gh-cell color-scale-3" />
-          <div className="gh-cell color-scale-4" />
-        </div>
-        More
-      </div>
-
-      {/* GitHub-style Tooltip */}
-      {tooltip.show && (
-        <div 
-          className="gh-tooltip"
-          style={{ 
-            left: `${tooltip.x}px`, 
-            top: `${tooltip.y}px` 
-          }}
-        >
-          {tooltip.text}
-        </div>
-      )}
     </div>
   );
 }
