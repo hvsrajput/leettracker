@@ -7,8 +7,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,7 +29,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-6 animate-fade-in relative z-10 w-full overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-6 animate-fade-in relative z-10 w-full overflow-hidden bg-neutral-950">
       <div className="absolute inset-0 bg-neutral-950 -z-20"></div>
       
       {/* Decorative gradient blur */}

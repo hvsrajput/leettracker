@@ -134,6 +134,7 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
               return (
                 <div
                   key={`${col}-${row}`}
+                  title={`${cell.count} submissions on ${cell.date}`}
                   onMouseEnter={(e) => handleMouseEnter(e, cell)}
                   onMouseLeave={() => setTooltip({ show: false, text: '', x: 0, y: 0 })}
                   className={`rounded-sm transition-transform hover:scale-110 cursor-pointer ${getColorClass(cell.count)}`}

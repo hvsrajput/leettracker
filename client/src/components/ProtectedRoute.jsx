@@ -18,7 +18,8 @@ export default function ProtectedRoute({ children }) {
     );
   }
 
-  if (!user) {
+  const token = localStorage.getItem('token');
+  if (!user || !token) {
     return <Navigate to="/login" replace />;
   }
 
