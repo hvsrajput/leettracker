@@ -37,10 +37,10 @@ export default function Profile() {
     setMessage(null);
     try {
       const res = await api.post('/leetcode/sync');
-      const { solved, attempted } = res.data;
-      let msg = `Sync successful! ${solved} solved`;
-      if (attempted) msg += `, ${attempted} attempted`;
-      msg += ' problems imported.';
+      const { newlyImported, alreadyTracked } = res.data;
+      let msg = `Sync successful! Found ${newlyImported + alreadyTracked} solved problems.`;
+      if (newlyImported > 0) msg += ` Imported ${newlyImported} new ones.`;
+      else msg += ` All up to date.`;
       setMessage({ type: 'success', text: msg });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to sync from LeetCode. Ensure your username is correct.' });

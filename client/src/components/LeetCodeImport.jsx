@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import axios from 'axios';
+import { useState, useContext } from 'react';
 import api from '../api';
+import { AuthContext } from '../context/AuthContext';
 
 const CONSOLE_SCRIPT = `(async () => {
   console.log('LeetTracker: Fetching all solved problems...');
@@ -70,17 +70,57 @@ const CONSOLE_SCRIPT = `(async () => {
 })();`;
 
 export default function LeetCodeImport({ onSuccess, onCancel }) {
-  const [step, setStep] = useState(1);
+  const { user, setUser } = useContext(AuthContext);
+  const [step, setStep] = useState(0); // 0: Method Selection, 1-3: Advanced, 4: Success, 5: Instant Setup
+  const [importMethod, setImportMethod] = useState(null); // 'instant' or 'advanced'
   const [pastedData, setPastedData] = useState('');
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Instant Sync states
+  const [tempUsername, setTempUsername] = useState(user?.leetcodeUsername || '');
 
   const handleCopyScript = () => {
     navigator.clipboard.writeText(CONSOLE_SCRIPT);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleInstantSync = async (usernameToUse = tempUsername) => {
+    if (!usernameToUse.trim()) {
+      setError('Please enter your LeetCode username');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      // 1. If username is new, save it to profile first
+      if (usernameToUse !== user?.leetcodeUsername) {
+        await api.put('/auth/profile', { leetcodeUsername: usernameToUse });
+        setUser({ ...user, leetcodeUsername: usernameToUse });
+      }
+
+      // 2. Trigger sync
+      const resp = await api.post('/leetcode/sync');
+      const { newlyImported, alreadyTracked, totalFound } = resp.data;
+      
+      setResult({
+        solved: newlyImported,
+        alreadyExists: alreadyTracked,
+        failed: totalFound - (newlyImported + alreadyTracked),
+        total: totalFound
+      });
+      setStep(4);
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Sync failed. Check your username and privacy settings on LeetCode.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleImport = async () => {
@@ -111,17 +151,119 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
   return (
     <div className="text-gray-300">
-      {/* Step indicators */}
-      <div className="flex gap-2 mb-6 justify-center">
-        {[1, 2, 3].map(s => (
-          <div key={s} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s ? 'bg-[#FFA116] text-black' : 'bg-white/10 text-gray-500'}`}>
-            {s}
-          </div>
-        ))}
-      </div>
+      {/* Step indicators (only for Advanced) */}
+      {importMethod === 'advanced' && step > 0 && step < 4 && (
+        <div className="flex gap-2 mb-6 justify-center">
+          {[1, 2, 3].map(s => (
+            <div key={s} className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${step >= s ? 'bg-[#FFA116] text-black' : 'bg-white/10 text-gray-500'}`}>
+              {s}
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* ── STEP 1: Go to LeetCode ── */}
-      {step === 1 && (
+      {/* ── STEP 0: Selection ── */}
+      {step === 0 && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 gap-4">
+            <button 
+              onClick={() => {
+                setImportMethod('instant');
+                if (user?.leetcodeUsername) handleInstantSync(user.leetcodeUsername);
+                else setStep(5);
+              }}
+              className="group p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-[#FFA116]/50 hover:bg-[#FFA116]/5 transition-all text-left"
+            >
+              <div className="flex items-center gap-4 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-[#FFA116]/10 flex items-center justify-center border border-[#FFA116]/20">
+                  <svg className="w-6 h-6 text-[#FFA116]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-white">Instant Sync</h4>
+                  <p className="text-xs text-[#FFA116] font-medium uppercase tracking-wider">Zero Config</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Uses your public profile to import recently solved problems. Fast and easy, but limited to the last 20 exact dates.
+              </p>
+            </button>
+
+            <button 
+              onClick={() => {
+                setImportMethod('advanced');
+                setStep(1);
+              }}
+              className="group p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all text-left"
+            >
+              <div className="flex items-center gap-4 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                  <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-white">Advanced Import</h4>
+                  <p className="text-xs text-indigo-400 font-medium uppercase tracking-wider">Full History</p>
+                </div>
+              </div>
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Uses a browser script to fetch your entire solved history with exact dates for every problem. Recommended for first-time setup.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 5: Instant Setup ── */}
+      {step === 5 && (
+        <div className="space-y-6 animate-fade-in">
+          <div>
+            <h3 className="text-xl font-bold text-white mb-2">Set Your LeetCode Username</h3>
+            <p className="text-gray-400 text-sm">We need your public username to fetch your solved problems.</p>
+          </div>
+          
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Your LeetCode Username"
+              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-[#FFA116] focus:border-[#FFA116] outline-none transition-all"
+              value={tempUsername}
+              onChange={e => setTempUsername(e.target.value)}
+            />
+            {error && <p className="text-red-400 text-sm">❌ {error}</p>}
+          </div>
+
+          <div className="flex gap-4">
+            <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => setStep(0)}>
+              &larr; Back
+            </button>
+            <button 
+              className="flex-1 px-6 py-2.5 rounded-lg bg-[#FFA116] text-black font-semibold hover:bg-[#ffb038] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={() => handleInstantSync()}
+              disabled={loading}
+            >
+              {loading ? (
+                <><svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Syncing...</>
+              ) : 'Start Syncing &rarr;'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SYNC LOADING (if username already exists) ── */}
+      {loading && step === 0 && (
+         <div className="py-12 flex flex-col items-center justify-center space-y-4">
+            <svg className="animate-spin h-10 w-10 text-[#FFA116]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-gray-400 animate-pulse">Fetching your LeetCode progress...</p>
+         </div>
+      )}
+
+      {step === 1 && importMethod === 'advanced' && (
         <div className="space-y-6 animate-fade-in">
           <div>
             <h3 className="text-xl font-bold text-white mb-2">Step 1: Open LeetCode</h3>
@@ -145,8 +287,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
         </div>
       )}
 
-      {/* ── STEP 2: Run the script ── */}
-      {step === 2 && (
+      {step === 2 && importMethod === 'advanced' && (
         <div className="space-y-6 animate-fade-in">
           <div>
             <h3 className="text-xl font-bold text-white mb-2">Step 2: Run the Script in Console</h3>
@@ -187,8 +328,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
         </div>
       )}
 
-      {/* ── STEP 3: Paste data ── */}
-      {step === 3 && (
+      {step === 3 && importMethod === 'advanced' && (
         <div className="space-y-6 animate-fade-in">
           <div>
             <h3 className="text-xl font-bold text-white mb-2">Step 3: Paste the Result Here</h3>
@@ -259,7 +399,8 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
           
           <div className="flex gap-4">
             <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => {
-              setStep(1);
+              setStep(0);
+              setImportMethod(null);
               setPastedData('');
               setResult(null);
             }}>

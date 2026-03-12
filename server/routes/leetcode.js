@@ -237,7 +237,8 @@ module.exports = function () {
       }
 
       const defaultTimestamp = new Date().toISOString();
-      let solvedCount = 0;
+      let newlyImported = 0;
+      let alreadyTracked = 0;
 
       for (const slug of solvedSlugs) {
         const problemData = datasetMapBySlug.get(slug);
@@ -246,11 +247,17 @@ module.exports = function () {
           const ts = dateMap.get(slug) || defaultTimestamp;
           await ensureProblemExists(problemData, req.userId);
           const result = await updateProgress(req.userId, num, 'solved', ts);
-          if (result === 'solved') solvedCount++;
+          if (result === 'solved') newlyImported++;
+          else alreadyTracked++;
         }
       }
 
-      res.json({ success: true, solved: solvedCount, totalFound: solvedSlugs.size });
+      res.json({ 
+        success: true, 
+        newlyImported, 
+        alreadyTracked, 
+        totalFound: solvedSlugs.size 
+      });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);
       res.status(500).json({ error: 'Failed to sync from LeetCode' });
