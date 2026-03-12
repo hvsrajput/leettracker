@@ -1,6 +1,6 @@
-import { useState, useContext } from 'react';
+import { useState } from 'react';
 import api from '../api';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const CONSOLE_SCRIPT = `(async () => {
   console.log('LeetTracker: Fetching all solved problems...');
@@ -70,7 +70,7 @@ const CONSOLE_SCRIPT = `(async () => {
 })();`;
 
 export default function LeetCodeImport({ onSuccess, onCancel }) {
-  const { user, setUser } = useContext(AuthContext);
+  const { user, updateUser } = useAuth();
   const [step, setStep] = useState(0); // 0: Method Selection, 1-3: Advanced, 4: Success, 5: Instant Setup
   const [importMethod, setImportMethod] = useState(null); // 'instant' or 'advanced'
   const [pastedData, setPastedData] = useState('');
@@ -101,7 +101,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
       // 1. If username is new, save it to profile first
       if (usernameToUse !== user?.leetcodeUsername) {
         await api.put('/auth/profile', { leetcodeUsername: usernameToUse });
-        setUser({ ...user, leetcodeUsername: usernameToUse });
+        updateUser({ ...user, leetcodeUsername: usernameToUse });
       }
 
       // 2. Trigger sync
