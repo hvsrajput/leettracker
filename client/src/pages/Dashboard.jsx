@@ -11,7 +11,7 @@ export default function Dashboard() {
   const [heatmapLoading, setHeatmapLoading] = useState(true);
   const [heatmapGroup, setHeatmapGroup] = useState('me'); // 'me' or groupId
 
-  // New states for Smart Pattern Heatmap & Company Preparation
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [patternHeatmap, setPatternHeatmap] = useState(null);
   const [companyProgress, setCompanyProgress] = useState(null);
 
@@ -32,11 +32,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     setHeatmapLoading(true);
-    api.get(`/dashboard/heatmap?groupId=${heatmapGroup}`)
+    api.get(`/dashboard/heatmap?groupId=${heatmapGroup}&year=${selectedYear}`)
       .then(res => setHeatmapData(res.data))
       .catch(console.error)
       .finally(() => setHeatmapLoading(false));
-  }, [heatmapGroup]);
+  }, [heatmapGroup, selectedYear]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading dashboard...</div>;
@@ -104,11 +104,35 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {heatmapLoading ? (
-        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 flex items-center justify-center text-gray-400 min-h-[300px]">Loading activity...</div>
-      ) : (
-        <Heatmap data={heatmapData} />
-      )}
+      {/* Heatmap Section */}
+      <div className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 pr-[120px] shadow-lg shadow-black/30 min-h-[280px]">
+        {heatmapLoading ? (
+          <div className="flex items-center justify-center text-gray-400 h-full py-20">Loading activity...</div>
+        ) : (
+          <Heatmap data={heatmapData} year={selectedYear} />
+        )}
+        
+        {/* Year Selector */}
+        <div className="absolute right-6 top-6 w-[100px] flex flex-col gap-1.5">
+          {Array.from({ length: 5 }).map((_, i) => {
+            const year = new Date().getFullYear() - i;
+            const isActive = selectedYear === year;
+            return (
+              <button
+                key={year}
+                onClick={() => setSelectedYear(year)}
+                className={`text-xs font-medium transition-all duration-200 text-left px-3 py-1.5 rounded-lg border ${
+                  isActive 
+                    ? 'bg-blue-600/20 text-blue-400 border-blue-500/50 shadow-lg shadow-blue-500/10' 
+                    : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5'
+                }`}
+              >
+                {year}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Smart Pattern Insights */}
       {patternHeatmap && (
