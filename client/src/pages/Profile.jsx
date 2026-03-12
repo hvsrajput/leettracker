@@ -118,7 +118,7 @@ export default function Profile() {
           {user?.leetcodeUsername && (
             <div className="mt-8 pt-6 border-t border-white/10">
               <h3 className="text-lg font-semibold text-white mb-2">Automated Data Sync Status</h3>
-              <p className="text-sm text-gray-400 mb-4 leading-relaxed">Fetch your latest solved and attempted submissions instantly. <span className="text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer">Check your problems page</span> for cookies-based import logic.</p>
+              <p className="text-sm text-gray-400 mb-4 leading-relaxed">Fetch your latest solved and attempted submissions instantly.</p>
               <button 
                 onClick={handleSync} 
                 className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-[#FFA116]/10 text-[#FFA116] font-medium hover:bg-[#FFA116]/20 border border-[#FFA116]/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2" 

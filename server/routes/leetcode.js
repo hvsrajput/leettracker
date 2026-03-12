@@ -190,14 +190,11 @@ module.exports = function () {
       `;
 
       const subQuery = `
-        query submissionList($offset: Int!, $limit: Int!) {
-          submissionList(offset: $offset, limit: $limit) {
-            hasNext
-            submissions {
-              titleSlug
-              statusDisplay
-              timestamp
-            }
+        query recentSubmissionList($username: String!, $limit: Int!) {
+          recentSubmissionList(username: $username, limit: $limit) {
+            titleSlug
+            statusDisplay
+            timestamp
           }
         }
       `;
@@ -218,31 +215,22 @@ module.exports = function () {
         const accepted = profileResp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
         accepted.forEach(q => solvedSlugs.add(q.titleSlug));
 
-        // Step 2: Get recent submission dates (Limited pages to avoid timeouts/blocks)
-        let offset = 0;
-        let hasNext = true;
-        let pages = 0;
-        while (hasNext && pages < 3) {
-          const subResp = await axios.post('https://leetcode.com/graphql', {
-            query: subQuery,
-            variables: { offset, limit: 20 }
-          }, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 5000
-          });
+        // Step 2: Get recent submission dates
+        const subResp = await axios.post('https://leetcode.com/graphql', {
+          query: subQuery,
+          variables: { username, limit: 20 }
+        }, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 5000
+        });
 
-          const list = subResp.data?.data?.submissionList;
-          if (!list) break;
-
-          list.submissions.forEach(sub => {
+        const list = subResp.data?.data?.recentSubmissionList;
+        if (list) {
+          list.forEach(sub => {
             if (sub.statusDisplay === 'Accepted' && !dateMap.has(sub.titleSlug)) {
               dateMap.set(sub.titleSlug, new Date(parseInt(sub.timestamp) * 1000).toISOString());
             }
           });
-
-          hasNext = list.hasNext;
-          offset += 20;
-          pages++;
         }
       } catch (err) {
         console.error('GraphQL Sync Error:', err.message);
