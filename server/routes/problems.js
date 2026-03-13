@@ -81,6 +81,9 @@ module.exports = function () {
         progressMap[lcNum] = { solved: p.solved, status };
       });
 
+      // Filter global problems to only the ones you track
+      problems = problems.filter(p => progressMap.hasOwnProperty(String(p.leetcodeNumber)));
+
       // Attach solved status and companies from dataset
       let result = problems.map(p => {
         const datasetEntry = datasetMap.get(p.leetcodeNumber);
@@ -135,63 +138,75 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode number is required' });
       }
 
-      // Check if already exists
-      const existing = await getItem(`PROBLEM#${num}`, 'DETAIL');
-      if (existing) {
+      // Check if already tracking
+      const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
+      if (progress) {
         return res.status(400).json({
-          error: 'Problem already added',
-          problem: {
-            id: existing.leetcodeNumber,
-            leetcode_number: existing.leetcodeNumber,
-            title: existing.title,
-            difficulty: existing.difficulty,
-            url: existing.url,
-            pattern_name: existing.patternName,
-          },
+          error: 'Problem already in your list',
         });
       }
 
       // Lookup from dataset
-      const data = datasetMap.get(num);
-      const title = data ? data.title : (manualTitle || `Problem ${num}`);
-      const difficulty = data ? data.difficulty : (manualDiff || 'Medium');
-      const slug = data ? data.slug : (manualTitle ? manualTitle.toLowerCase().replace(/\\s+/g, '-') : `problem-${num}`);
-      const url = data ? data.url : (manualUrl || `https://leetcode.com/problems/${slug}/`);
+      let title, difficulty, slug, url, patternName = null;
+      const existing = await getItem(`PROBLEM#${num}`, 'DETAIL');
+      
+      if (existing) {
+        // Use existing metadata
+        title = existing.title;
+        difficulty = existing.difficulty;
+        slug = existing.slug;
+        url = existing.url;
+        patternName = existing.patternName;
+      } else {
+        // Fallback to dataset or manual entry
+        const data = datasetMap.get(num);
+        title = data ? data.title : (manualTitle || `Problem ${num}`);
+        difficulty = data ? data.difficulty : (manualDiff || 'Medium');
+        slug = data ? data.slug : (manualTitle ? manualTitle.toLowerCase().replace(/\\s+/g, '-') : `problem-${num}`);
+        url = data ? data.url : (manualUrl || `https://leetcode.com/problems/${slug}/`);
 
-      // Determine pattern name
-      let patternName = null;
-      if (pattern_name) {
-        patternName = pattern_name;
-      } else if (data && data.topics && data.topics.length > 0) {
-        patternName = data.topics[0];
-      }
-
-      const createdAt = new Date().toISOString();
-
-      if (patternName) {
-        const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
-        if (existingPattern.length === 0) {
-          await putItem({
-            PK: 'PATTERN',
-            SK: `PAT#${patternName}`,
-            name: patternName,
-            isDefault: 0,
-            createdBy: req.userId,
-          });
+        if (pattern_name) {
+          patternName = pattern_name;
+        } else if (data && data.topics && data.topics.length > 0) {
+          patternName = data.topics[0];
         }
+
+        const createdAt = new Date().toISOString();
+
+        if (patternName) {
+          const existingPattern = await queryItems('PATTERN', `PAT#${patternName}`);
+          if (existingPattern.length === 0) {
+            await putItem({
+              PK: 'PATTERN',
+              SK: `PAT#${patternName}`,
+              name: patternName,
+              isDefault: 0,
+              createdBy: req.userId,
+            });
+          }
+        }
+
+        await putItem({
+          PK: `PROBLEM#${num}`,
+          SK: 'DETAIL',
+          leetcodeNumber: num,
+          title,
+          slug,
+          difficulty,
+          url,
+          patternName,
+          addedBy: req.userId,
+          createdAt,
+        });
       }
 
+      // Add to user's progress
       await putItem({
-        PK: `PROBLEM#${num}`,
-        SK: 'DETAIL',
-        leetcodeNumber: num,
-        title,
-        slug,
-        difficulty,
-        url,
-        patternName,
-        addedBy: req.userId,
-        createdAt,
+        PK: `PROGRESS#${req.userId}`,
+        SK: `PROB#${num}`,
+        solved: 0,
+        status: 'unsolved',
+        solvedAt: null,
       });
 
       res.json({
@@ -203,7 +218,8 @@ module.exports = function () {
         url,
         pattern_name: patternName,
         added_by: req.userId,
-        created_at: createdAt,
+        status: 'unsolved',
+        solved: 0
       });
     } catch (err) {
       console.error('Add problem error:', err);
@@ -284,17 +300,13 @@ module.exports = function () {
         return res.status(404).json({ error: 'Problem not found' });
       }
 
-      // Delete the problem detail
-      await deleteItem(`PROBLEM#${problemId}`, 'DETAIL');
+      // Only remove the user's progress for this problem, effectively "untracking" it.
+      await deleteItem(`PROGRESS#${req.userId}`, `PROB#${problemId}`);
       
-      // Clean up all PROGRESS# items for this problem across all users
-      const progressItems = await scanItems(
-        'begins_with(PK, :prefix) AND SK = :sk',
-        { ':prefix': 'PROGRESS#', ':sk': `PROB#${problemId}` }
-      );
-      for (const pi of progressItems) {
-        await deleteItem(pi.PK, pi.SK);
-      }
+      // Clean up all GROUP# PROBLEM# entries if current user added it? 
+      // Safest is to just untrack for the user. 
+      // Wait, we can optionally clean up the group entries if they add it from groups, but we will leave them for now.
+
 
       // Clean up all GROUP# PROBLEM# entries referencing this problem
       const groupProblemItems = await scanItems(

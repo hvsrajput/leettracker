@@ -22,7 +22,10 @@ module.exports = function () {
         progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt, status };
       });
 
-      const totalProblems = problems.length;
+      // Filter to only problems the user is tracking
+      const trackedProblems = problems.filter(p => progressMap.hasOwnProperty(String(p.leetcodeNumber)));
+
+      const totalProblems = trackedProblems.length;
       let totalSolved = 0;
       let totalAttempted = 0;
 
@@ -30,7 +33,7 @@ module.exports = function () {
       const patternMap = {};
       const difficultyMap = {};
 
-      problems.forEach(p => {
+      trackedProblems.forEach(p => {
         const progress = progressMap[String(p.leetcodeNumber)];
         const status = progress?.status || 'unsolved';
         const isSolved = status === 'solved';
@@ -179,7 +182,9 @@ module.exports = function () {
       });
 
       const patternMap = {};
-      problems.forEach(p => {
+      const trackedProblems = problems.filter(p => progressMap.hasOwnProperty(String(p.leetcodeNumber)));
+
+      trackedProblems.forEach(p => {
         if (p.patternName) {
           if (!patternMap[p.patternName]) {
             patternMap[p.patternName] = { pattern: p.patternName, total: 0, solved: 0 };
