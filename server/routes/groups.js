@@ -145,39 +145,64 @@ module.exports = function () {
 
       // Get group problems
       const groupProblemItems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
-      
-      // Fetch full problem details and progress for all members
-      const problems = [];
-      for (const gp of groupProblemItems) {
-        const lcNum = gp.SK.replace('PROBLEM#', '');
-        const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
-        if (!problem) continue;
-        const datasetEntry = datasetMap.get(problem.leetcodeNumber);
+      const [problemDetails, memberProgressMaps] = await Promise.all([
+        Promise.all(
+          groupProblemItems.map(async (gp) => {
+            const lcNum = gp.SK.replace('PROBLEM#', '');
+            const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
+            return problem || null;
+          })
+        ),
+        Promise.all(
+          members.map(async (member) => {
+            const progressItems = await queryItems(`PROGRESS#${member.id}`, 'PROB#');
+            const progressMap = {};
 
-        // Get progress for each member
-        const memberStatuses = [];
-        for (const member of members) {
-          const progress = await getItem(`PROGRESS#${member.id}`, `PROB#${lcNum}`);
-          memberStatuses.push({
-            user_id: member.id,
-            username: member.username,
-            solved: progress ? progress.solved : 0,
-            status: progress?.status || (progress?.solved === 1 ? 'solved' : 'unsolved'),
+            progressItems.forEach((progress) => {
+              const lcNum = progress.SK.replace('PROB#', '');
+              progressMap[lcNum] = {
+                solved: progress.solved || 0,
+                status: progress.status || (progress.solved === 1 ? 'solved' : 'unsolved'),
+              };
+            });
+
+            return { memberId: member.id, progressMap };
+          })
+        ),
+      ]);
+
+      const progressByMemberId = memberProgressMaps.reduce((acc, entry) => {
+        acc[entry.memberId] = entry.progressMap;
+        return acc;
+      }, {});
+
+      const problems = problemDetails
+        .filter(Boolean)
+        .map((problem) => {
+          const datasetEntry = datasetMap.get(problem.leetcodeNumber);
+          const lcNum = String(problem.leetcodeNumber);
+          const memberStatuses = members.map((member) => {
+            const progress = progressByMemberId[member.id]?.[lcNum];
+            return {
+              user_id: member.id,
+              username: member.username,
+              solved: progress ? progress.solved : 0,
+              status: progress?.status || 'unsolved',
+            };
           });
-        }
 
-        problems.push({
-          id: problem.leetcodeNumber,
-          leetcode_number: problem.leetcodeNumber,
-          title: problem.title,
-          difficulty: problem.difficulty,
-          url: problem.url,
-          pattern_name: problem.patternName,
-          topics: datasetEntry ? (datasetEntry.topics || []) : [],
-          companies: datasetEntry ? (datasetEntry.companies || []) : [],
-          member_statuses: memberStatuses,
+          return {
+            id: problem.leetcodeNumber,
+            leetcode_number: problem.leetcodeNumber,
+            title: problem.title,
+            difficulty: problem.difficulty,
+            url: problem.url,
+            pattern_name: problem.patternName,
+            topics: datasetEntry ? (datasetEntry.topics || []) : [],
+            companies: datasetEntry ? (datasetEntry.companies || []) : [],
+            member_statuses: memberStatuses,
+          };
         });
-      }
 
       // Sort problems by leetcode number
       problems.sort((a, b) => a.leetcode_number - b.leetcode_number);

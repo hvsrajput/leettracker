@@ -17,6 +17,7 @@ export default function GroupDetail() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
+  const [expandedTopics, setExpandedTopics] = useState({});
   
   // Advanced filters
   const [activePattern, setActivePattern] = useState('all');
@@ -244,6 +245,13 @@ export default function GroupDetail() {
         )}
       </div>
     );
+  };
+
+  const toggleExpandedTopics = (problemId) => {
+    setExpandedTopics(prev => ({
+      ...prev,
+      [problemId]: !prev[problemId],
+    }));
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading group...</div>;
@@ -506,7 +514,7 @@ export default function GroupDetail() {
               <span className="w-16 flex-shrink-0">#</span>
               <span className="w-64 flex-shrink-0">Problem</span>
               <span className="w-32 flex-shrink-0">Difficulty</span>
-              <span className="min-w-[320px] flex-1 pr-6">Topics</span>
+              <span className="min-w-[360px] flex-1 pr-6">Topics</span>
               <div className="flex flex-none justify-end gap-6 pl-6">
                 {group.members?.map(m => (
                   <div className="w-24 flex-shrink-0 text-center" key={m.id} title={m.username}>
@@ -523,6 +531,9 @@ export default function GroupDetail() {
             <div className="divide-y divide-white/5">
               {filteredProblems.map((p) => {
                 const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
+                const hasExpandedTopics = expandedTopics[p.id];
+                const visibleTopics = hasExpandedTopics ? (p.topics || []) : (p.topics || []).slice(0, 2);
+                const hiddenTopicsCount = Math.max((p.topics || []).length - visibleTopics.length, 0);
 
                 return (
                 <div 
@@ -544,15 +555,37 @@ export default function GroupDetail() {
                       {p.difficulty}
                     </span>
                   </span>
-                  <div className="min-w-[320px] flex-1 flex flex-wrap gap-2 pr-6">
-                    {p.topics?.length ? p.topics.map(topic => (
-                      <span
-                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                        key={topic}
-                      >
-                        {topic}
-                      </span>
-                    )) : (
+                  <div className="min-w-[360px] flex-1 flex flex-wrap items-center gap-2 pr-6">
+                    {p.topics?.length ? (
+                      <>
+                        {visibleTopics.map(topic => (
+                          <span
+                            className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                            key={topic}
+                          >
+                            {topic}
+                          </span>
+                        ))}
+                        {hiddenTopicsCount > 0 && (
+                          <button
+                            type="button"
+                            className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                            onClick={() => toggleExpandedTopics(p.id)}
+                          >
+                            +{hiddenTopicsCount} more
+                          </button>
+                        )}
+                        {hasExpandedTopics && p.topics.length > 2 && (
+                          <button
+                            type="button"
+                            className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                            onClick={() => toggleExpandedTopics(p.id)}
+                          >
+                            Show less
+                          </button>
+                        )}
+                      </>
+                    ) : (
                       <span className="text-xs text-gray-500">No topics</span>
                     )}
                   </div>

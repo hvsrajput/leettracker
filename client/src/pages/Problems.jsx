@@ -329,19 +329,19 @@ export default function Problems() {
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-hidden">
-          <div className="grid grid-cols-[112px_112px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
-            <span className="text-center whitespace-nowrap tracking-normal">Attempted</span>
-            <span className="text-center whitespace-nowrap tracking-normal">Solved</span>
-            <span>#</span>
-            <span>Title</span>
-            <span>Difficulty</span>
-            <span>Pattern / Company</span>
-            <span className="text-center">Del</span>
+          <div className="grid grid-cols-[128px_128px_60px_minmax(220px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 border-b border-white/10 text-[11px] font-semibold text-gray-400 bg-white/5">
+            <span className="text-center whitespace-nowrap">Attempted</span>
+            <span className="text-center whitespace-nowrap">Solved</span>
+            <span className="uppercase tracking-wider">#</span>
+            <span className="uppercase tracking-wider">Title</span>
+            <span className="uppercase tracking-wider">Difficulty</span>
+            <span className="uppercase tracking-wider">Pattern / Company</span>
+            <span className="text-center uppercase tracking-wider">Del</span>
           </div>
           <div className="divide-y divide-white/5">
             {problems.map((p, i) => (
               <div 
-                className={`grid grid-cols-[112px_112px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
+                className={`grid grid-cols-[128px_128px_60px_minmax(220px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
                 key={p.id}
               >
                 <div className="flex justify-center flex-shrink-0">
