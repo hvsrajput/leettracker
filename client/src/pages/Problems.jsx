@@ -105,9 +105,9 @@ export default function Problems() {
     }
   };
 
-  const handleToggle = async (problemId) => {
+  const handleSetStatus = async (problemId, nextStatus) => {
     try {
-      const res = await api.post(`/problems/${problemId}/toggle`);
+      const res = await api.post(`/problems/${problemId}/status`, { status: nextStatus });
       setAllProblems(prev => prev.map(p => 
         p.id === problemId ? { ...p, solved: res.data.solved, status: res.data.status } : p
       ));
@@ -329,8 +329,9 @@ export default function Problems() {
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-hidden">
-          <div className="grid grid-cols-[48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
-            <span className="text-center">Status</span>
+          <div className="grid grid-cols-[48px_48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
+            <span className="text-center">Attempted</span>
+            <span className="text-center">Solved</span>
             <span>#</span>
             <span>Title</span>
             <span>Difficulty</span>
@@ -340,26 +341,38 @@ export default function Problems() {
           <div className="divide-y divide-white/5">
             {problems.map((p, i) => (
               <div 
-                className={`grid grid-cols-[48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
+                className={`grid grid-cols-[48px_48px_60px_minmax(200px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
                 key={p.id}
               >
                 <div className="flex justify-center flex-shrink-0">
                   <button 
                     className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
-                      p.status === 'solved' ? 'bg-green-500 border border-green-500 text-black' : 
-                      p.status === 'attempted' ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-500' : 
+                      p.status === 'attempted' ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300' : 
                       'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
                     }`}
-                    onClick={() => handleToggle(p.id)}
+                    onClick={() => handleSetStatus(p.id, p.status === 'attempted' ? 'unsolved' : 'attempted')}
+                    title={p.status === 'attempted' ? 'Mark unattempted' : 'Mark attempted'}
+                  >
+                    {p.status === 'attempted' && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                <div className="flex justify-center flex-shrink-0">
+                  <button 
+                    className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                      p.status === 'solved' ? 'bg-green-500 border border-green-500 text-black' : 
+                      'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
+                    }`}
+                    onClick={() => handleSetStatus(p.id, p.status === 'solved' ? 'unsolved' : 'solved')}
                     title={p.status === 'solved' ? 'Mark unsolved' : 'Mark solved'}
                   >
                     {p.status === 'solved' && (
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                       </svg>
-                    )}
-                    {p.status === 'attempted' && (
-                      <div className="w-2 h-2 rounded-full bg-current"></div>
                     )}
                   </button>
                 </div>

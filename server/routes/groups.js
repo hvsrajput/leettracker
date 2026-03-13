@@ -25,6 +25,20 @@ module.exports = function () {
         // Count members and problems
         const members = await queryItems(`GROUP#${groupId}`, 'MEMBER#');
         const problems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
+        let solved_count = 0;
+        let attempted_count = 0;
+
+        for (const problem of problems) {
+          const lcNum = problem.SK.replace('PROBLEM#', '');
+          const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${lcNum}`);
+          const status = progress?.status || (progress?.solved === 1 ? 'solved' : 'unsolved');
+
+          if (status === 'solved') {
+            solved_count += 1;
+          } else if (status === 'attempted') {
+            attempted_count += 1;
+          }
+        }
 
         groups.push({
           id: groupId,
@@ -34,6 +48,9 @@ module.exports = function () {
           created_at: detail.createdAt,
           member_count: members.length,
           problem_count: problems.length,
+          solved_count,
+          attempted_count,
+          unsolved_count: Math.max(problems.length - solved_count - attempted_count, 0),
         });
       }
 
@@ -83,7 +100,15 @@ module.exports = function () {
         groupName: trimmedName,
       });
 
-      res.json({ id: groupId, name: trimmedName, member_count: 1, problem_count: 0 });
+      res.json({
+        id: groupId,
+        name: trimmedName,
+        member_count: 1,
+        problem_count: 0,
+        solved_count: 0,
+        attempted_count: 0,
+        unsolved_count: 0,
+      });
     } catch (err) {
       console.error('Create group error:', err);
       res.status(500).json({ error: 'Failed to create group' });

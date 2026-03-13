@@ -179,13 +179,71 @@ export default function GroupDetail() {
     }
   };
 
-  const handleToggle = async (problemId) => {
+  const handleAddMultipleFromProblemset = async (problemsToAdd) => {
+    let addedCount = 0;
+    let failedCount = 0;
+
+    for (const problem of problemsToAdd) {
+      try {
+        await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
+        addedCount += 1;
+      } catch (err) {
+        failedCount += 1;
+      }
+    }
+
+    if (addedCount > 0) {
+      fetchGroup();
+    }
+
+    return { addedCount, failedCount };
+  };
+
+  const handleSetStatus = async (problemId, nextStatus) => {
     try {
-      await api.post(`/problems/${problemId}/toggle`);
+      await api.post(`/problems/${problemId}/status`, { status: nextStatus });
       fetchGroup();
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const renderStatusControl = (problemId, memberStatus, targetStatus, isCurrentUser) => {
+    const isActive = memberStatus?.status === targetStatus;
+    const activeClasses = targetStatus === 'solved'
+      ? 'bg-green-500 border-green-500 text-black shadow-[0_0_10px_rgba(34,197,94,0.3)]'
+      : 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300';
+    const inactiveClasses = 'bg-white/5 border-white/20 text-transparent hover:border-white/40';
+    const staticInactiveClasses = 'bg-transparent border-white/5 text-white/10';
+
+    if (isCurrentUser) {
+      const nextStatus = isActive ? 'unsolved' : targetStatus;
+      return (
+        <button
+          className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${isActive ? activeClasses : inactiveClasses}`}
+          onClick={() => handleSetStatus(problemId, nextStatus)}
+          title={isActive ? `Mark ${targetStatus} off` : `Mark ${targetStatus}`}
+        >
+          {isActive && (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <div className={`w-6 h-6 rounded flex items-center justify-center border transition-all ${isActive ? activeClasses : staticInactiveClasses}`}>
+        {isActive ? (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+          </svg>
+        ) : (
+          <div className="w-1.5 h-px bg-white/20"></div>
+        )}
+      </div>
+    );
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading group...</div>;
@@ -450,17 +508,24 @@ export default function GroupDetail() {
               <span className="w-32 flex-shrink-0">Difficulty</span>
               <div className="flex-1 flex justify-between px-4 gap-8">
                 {group.members?.map(m => (
-                  <span className="w-16 text-center truncate" key={m.id} title={m.username}>
-                    {m.username.substring(0, 5)}
-                  </span>
+                  <div className="w-24 flex-shrink-0 text-center" key={m.id} title={m.username}>
+                    <div className="truncate">{m.username.substring(0, 5)}</div>
+                    <div className="mt-1 flex justify-center gap-3 text-[10px] text-gray-500">
+                      <span className="w-6 text-center">A</span>
+                      <span className="w-6 text-center">S</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
             {/* Table Body */}
             <div className="divide-y divide-white/5">
-              {filteredProblems.map((p, i) => (
+              {filteredProblems.map((p) => {
+                const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
+
+                return (
                 <div 
-                  className={`flex p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.solved ? 'bg-green-500/[0.02]' : ''}`}
+                  className={`flex p-4 items-center transition-all duration-200 hover:bg-white/5 ${myStatus === 'solved' ? 'bg-green-500/[0.02]' : myStatus === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`}
                   key={p.leetcode_number}
                 >
                   <span className="w-16 flex-shrink-0 font-mono text-gray-500 text-sm">#{p.leetcode_number}</span>
@@ -480,43 +545,15 @@ export default function GroupDetail() {
                   </span>
                   <div className="flex-1 flex justify-between px-4 gap-8">
                     {p.member_statuses?.map(ms => (
-                      <span className="w-16 flex justify-center" key={ms.user_id}>
-                        {ms.user_id === user?.id ? (
-                          <button 
-                            className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
-                              ms.solved 
-                                ? 'bg-green-500 border border-green-500 text-black shadow-[0_0_10px_rgba(34,197,94,0.3)]' 
-                                : 'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
-                            }`}
-                            onClick={() => handleToggle(p.id)}
-                            title={ms.solved ? 'Mark unsolved' : 'Mark solved'}
-                          >
-                            {ms.solved && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                              </svg>
-                            )}
-                          </button>
-                        ) : (
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
-                            ms.solved 
-                              ? 'bg-green-500/10 border-green-500/30 text-green-500' 
-                              : 'bg-transparent border-white/5 text-white/10'
-                          }`}>
-                            {ms.solved ? (
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                              </svg>
-                            ) : (
-                              <div className="w-1.5 h-px bg-white/20"></div>
-                            )}
-                          </div>
-                        )}
-                      </span>
+                      <div className="w-24 flex-shrink-0 flex justify-center gap-3" key={ms.user_id}>
+                        {renderStatusControl(p.id, ms, 'attempted', ms.user_id === user?.id)}
+                        {renderStatusControl(p.id, ms, 'solved', ms.user_id === user?.id)}
+                      </div>
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -552,6 +589,7 @@ export default function GroupDetail() {
         isOpen={showAddFromProblemset}
         onClose={() => setShowAddFromProblemset(false)}
         onAddProblem={handleAddFromProblemset}
+        onAddProblems={handleAddMultipleFromProblemset}
         existingProblems={group.problems || []}
       />
 

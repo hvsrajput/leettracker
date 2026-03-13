@@ -9,6 +9,25 @@ const problemsDataset = require('../data/problems.json');
 const datasetMap = new Map();
 problemsDataset.forEach(p => datasetMap.set(p.number, p));
 
+async function setProblemStatus(userId, problemId, newStatus) {
+  const timestamp = new Date().toISOString();
+  const existingProgress = await getItem(`PROGRESS#${userId}`, `PROB#${problemId}`);
+
+  await putItem({
+    PK: `PROGRESS#${userId}`,
+    SK: `PROB#${problemId}`,
+    solved: newStatus === 'solved' ? 1 : 0,
+    status: newStatus,
+    solvedAt: newStatus === 'solved' ? timestamp : null,
+    attemptedAt: newStatus === 'attempted' ? (existingProgress?.attemptedAt || timestamp) : (existingProgress?.attemptedAt || null),
+  });
+
+  return {
+    solved: newStatus === 'solved' ? 1 : 0,
+    status: newStatus,
+  };
+}
+
 module.exports = function () {
   // Search problems from dataset (autocomplete)
   router.get('/search', auth, (req, res) => {
@@ -238,55 +257,43 @@ module.exports = function () {
         return res.status(404).json({ error: 'Problem not found' });
       }
 
-      // Check current progress
       const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${problemId}`);
+      const currentStatus = progress?.status || (progress?.solved ? 'solved' : 'unsolved');
 
-      if (progress) {
-        let newStatus = 'attempted';
-        let newSolved = 0;
-        let solvedAt = null;
-
-        if (progress.status === 'unsolved' || (!progress.status && !progress.solved)) {
-          newStatus = 'attempted';
-          newSolved = 0;
-          solvedAt = null;
-        } else if (progress.status === 'attempted') {
-          newStatus = 'solved';
-          newSolved = 1;
-          solvedAt = new Date().toISOString();
-        } else if (progress.status === 'solved' || progress.solved) {
-          newStatus = 'unsolved';
-          newSolved = 0;
-          solvedAt = null;
-        }
-
-        await updateItem(
-          `PROGRESS#${req.userId}`,
-          `PROB#${problemId}`,
-          'SET solved = :s, #st = :status, solvedAt = :sa',
-          {
-            ':s': newSolved,
-            ':status': newStatus,
-            ':sa': solvedAt,
-          },
-          {
-            '#st': 'status'
-          }
-        );
-        res.json({ solved: newSolved, status: newStatus });
-      } else {
-        await putItem({
-          PK: `PROGRESS#${req.userId}`,
-          SK: `PROB#${problemId}`,
-          solved: 0,
-          status: 'attempted',
-          solvedAt: null,
-        });
-        res.json({ solved: 0, status: 'attempted' });
+      let newStatus = 'attempted';
+      if (currentStatus === 'attempted') {
+        newStatus = 'solved';
+      } else if (currentStatus === 'solved') {
+        newStatus = 'unsolved';
       }
+
+      const result = await setProblemStatus(req.userId, problemId, newStatus);
+      res.json(result);
     } catch (err) {
       console.error('Toggle error:', err);
       res.status(500).json({ error: 'Failed to toggle problem status' });
+    }
+  });
+
+  router.post('/:id/status', auth, async (req, res) => {
+    try {
+      const problemId = parseInt(req.params.id);
+      const { status } = req.body;
+
+      if (!['unsolved', 'attempted', 'solved'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+
+      const problem = await getItem(`PROBLEM#${problemId}`, 'DETAIL');
+      if (!problem) {
+        return res.status(404).json({ error: 'Problem not found' });
+      }
+
+      const result = await setProblemStatus(req.userId, problemId, status);
+      res.json(result);
+    } catch (err) {
+      console.error('Set status error:', err);
+      res.status(500).json({ error: 'Failed to update problem status' });
     }
   });
 

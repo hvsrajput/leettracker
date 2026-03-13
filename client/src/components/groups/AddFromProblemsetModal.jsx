@@ -2,17 +2,20 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../api';
 import ProblemRow from './ProblemRow';
 
-export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, existingProblems = [] }) {
+export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, onAddProblems, existingProblems = [] }) {
   const [problems, setProblems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch user problemset when modal opens
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
       setError('');
+      setSelectedIds([]);
       loadProblems();
     }
   }, [isOpen]);
@@ -38,9 +41,10 @@ export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, 
     return problems.filter(p => {
       const titleMatch = p.title?.toLowerCase().includes(query);
       const diffMatch = p.difficulty?.toLowerCase().includes(query);
-      const patternMatch = p.patternName?.toLowerCase().includes(query);
+      const patternMatch = p.pattern_name?.toLowerCase().includes(query);
+      const topicMatch = p.topics?.some(topic => topic.toLowerCase().includes(query));
       
-      return titleMatch || diffMatch || patternMatch;
+      return titleMatch || diffMatch || patternMatch || topicMatch;
     });
   }, [problems, searchQuery]);
 
@@ -57,6 +61,50 @@ export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, 
 
   // Convert existing problems array to a Set of IDs for quick lookup
   const existingSet = new Set(existingProblems.map(p => p.id));
+  const selectableProblems = filteredProblems.filter(problem => !existingSet.has(problem.id));
+  const selectedCount = selectedIds.filter(id => !existingSet.has(id)).length;
+
+  const toggleSelected = (problemId) => {
+    setSelectedIds(prev => (
+      prev.includes(problemId)
+        ? prev.filter(id => id !== problemId)
+        : [...prev, problemId]
+    ));
+  };
+
+  const handleAddSelected = async (problemsToAdd) => {
+    if (!problemsToAdd.length || !onAddProblems) return;
+
+    const confirmed = window.confirm(`Add ${problemsToAdd.length} problem${problemsToAdd.length === 1 ? '' : 's'} to this group?`);
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const result = await onAddProblems(problemsToAdd);
+      setSelectedIds([]);
+
+      if (result?.failedCount) {
+        setError(`${result.failedCount} problem${result.failedCount === 1 ? '' : 's'} could not be added.`);
+      } else {
+        onClose();
+      }
+    } catch (err) {
+      setError('Failed to add selected problems.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddAll = async () => {
+    await handleAddSelected(problems.filter(problem => !existingSet.has(problem.id)));
+  };
+
+  const handleAddCurrentSelection = async () => {
+    const selectedProblems = problems.filter(problem => selectedIds.includes(problem.id) && !existingSet.has(problem.id));
+    await handleAddSelected(selectedProblems);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -100,6 +148,46 @@ export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, 
           />
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="text-sm text-gray-400">
+            {selectedCount} selected · {selectableProblems.length} available in this view
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-gray-300 hover:bg-white/5 transition-colors disabled:opacity-50"
+              onClick={() => setSelectedIds(selectableProblems.map(problem => problem.id))}
+              disabled={!selectableProblems.length || isSubmitting}
+            >
+              Select Visible
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-white/10 text-sm text-gray-300 hover:bg-white/5 transition-colors disabled:opacity-50"
+              onClick={() => setSelectedIds([])}
+              disabled={!selectedCount || isSubmitting}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-sm text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+              onClick={handleAddAll}
+              disabled={!problems.some(problem => !existingSet.has(problem.id)) || isSubmitting}
+            >
+              Add All Not Added
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-sm font-medium text-white hover:bg-indigo-500 transition-colors disabled:opacity-50"
+              onClick={handleAddCurrentSelection}
+              disabled={!selectedCount || isSubmitting}
+            >
+              {isSubmitting ? 'Adding...' : `Add Selected (${selectedCount})`}
+            </button>
+          </div>
+        </div>
+
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
             {error}
@@ -122,15 +210,16 @@ export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, 
           ) : (
             <div className="divide-y divide-white/10">
               {filteredProblems.map(prob => {
-                // Determine topics gracefully depending on how backend structured `topics` vs `patternName`
-                const topics = prob.topics || (prob.patternName ? [prob.patternName] : []);
+                const topics = prob.topics || (prob.pattern_name ? [prob.pattern_name] : []);
                 
                 return (
                   <ProblemRow 
                     key={prob.id} 
                     problem={{ ...prob, topics }} 
                     isAdded={existingSet.has(prob.id)} 
-                    onAdd={onAddProblem} 
+                    isSelected={selectedIds.includes(prob.id)}
+                    onToggleSelect={toggleSelected}
+                    onAdd={onAddProblem}
                   />
                 );
               })}

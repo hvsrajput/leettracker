@@ -108,6 +108,18 @@ export default function Groups() {
                   <span className="text-2xl font-bold text-white">{g.problem_count}</span>
                 </div>
               </div>
+
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-green-500/10 text-green-400 border-green-500/20">
+                  {g.solved_count || 0} solved
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-yellow-500/10 text-yellow-300 border-yellow-500/20">
+                  {g.attempted_count || 0} attempted
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-white/5 text-gray-300 border-white/10">
+                  {g.unsolved_count || 0} unsolved
+                </span>
+              </div>
             </div>
           ))}
         </div>
