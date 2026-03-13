@@ -11,7 +11,6 @@ export default function GroupDetail() {
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [allProblems, setAllProblems] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showAddProblem, setShowAddProblem] = useState(false);
   const [showAddFromProblemset, setShowAddFromProblemset] = useState(false);
@@ -41,35 +40,9 @@ export default function GroupDetail() {
 
   useEffect(() => { fetchGroup(); }, [id]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchProblems = async () => {
-      try {
-        const res = await api.get('/problems');
-        if (isMounted) {
-          setAllProblems(res.data);
-        }
-      } catch (err) {
-        console.error('Failed to load problems for group filters', err);
-      }
-    };
-
-    fetchProblems();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const patterns = useMemo(() => {
-    const allProblemTopics = getProblemTopics(allProblems);
-    if (allProblemTopics.length > 0) {
-      return allProblemTopics;
-    }
-
     return getProblemTopics(group?.problems || []);
-  }, [allProblems, group]);
+  }, [group]);
 
   // Filter problems by active pattern and other filters
   const filteredProblems = useMemo(() => {

@@ -4,6 +4,10 @@ const { auth } = require('../middleware/auth');
 const { putItem, getItem, queryItems, deleteItem } = require('../db/dynamodb');
 
 const router = express.Router();
+const problemsDataset = require('../data/problems.json');
+const datasetMap = new Map();
+
+problemsDataset.forEach((problem) => datasetMap.set(problem.number, problem));
 
 module.exports = function () {
   // List user's groups
@@ -117,6 +121,7 @@ module.exports = function () {
         const lcNum = gp.SK.replace('PROBLEM#', '');
         const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
         if (!problem) continue;
+        const datasetEntry = datasetMap.get(problem.leetcodeNumber);
 
         // Get progress for each member
         const memberStatuses = [];
@@ -137,6 +142,8 @@ module.exports = function () {
           difficulty: problem.difficulty,
           url: problem.url,
           pattern_name: problem.patternName,
+          topics: datasetEntry ? (datasetEntry.topics || []) : [],
+          companies: datasetEntry ? (datasetEntry.companies || []) : [],
           member_statuses: memberStatuses,
         });
       }
@@ -227,6 +234,7 @@ module.exports = function () {
       // Get problem details to return
       const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
       if (problem) {
+        const datasetEntry = datasetMap.get(problem.leetcodeNumber);
         res.json({
           id: problem.leetcodeNumber,
           leetcode_number: problem.leetcodeNumber,
@@ -234,6 +242,8 @@ module.exports = function () {
           difficulty: problem.difficulty,
           url: problem.url,
           pattern_name: problem.patternName,
+          topics: datasetEntry ? (datasetEntry.topics || []) : [],
+          companies: datasetEntry ? (datasetEntry.companies || []) : [],
         });
       } else {
         res.json({ id: lcNum, leetcode_number: lcNum });
