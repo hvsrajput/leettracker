@@ -157,11 +157,25 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode number is required' });
       }
 
+      const datasetEntry = datasetMap.get(num);
+
       // Check if already tracking
       const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
       if (progress) {
         return res.status(400).json({
           error: 'Problem already in your list',
+          problem: {
+            id: num,
+            leetcode_number: num,
+            title: datasetEntry?.title || manualTitle || `Problem ${num}`,
+            difficulty: datasetEntry?.difficulty || manualDiff || 'Medium',
+            url: datasetEntry?.url || manualUrl || null,
+            pattern_name: datasetEntry?.topics?.[0] || pattern_name || null,
+            topics: datasetEntry?.topics || [],
+            companies: datasetEntry?.companies || [],
+            status: progress.status || (progress.solved === 1 ? 'solved' : 'unsolved'),
+            solved: progress.solved || 0,
+          },
         });
       }
 
@@ -178,7 +192,7 @@ module.exports = function () {
         patternName = existing.patternName;
       } else {
         // Fallback to dataset or manual entry
-        const data = datasetMap.get(num);
+        const data = datasetEntry;
         title = data ? data.title : (manualTitle || `Problem ${num}`);
         difficulty = data ? data.difficulty : (manualDiff || 'Medium');
         slug = data ? data.slug : (manualTitle ? manualTitle.toLowerCase().replace(/\\s+/g, '-') : `problem-${num}`);
@@ -238,7 +252,9 @@ module.exports = function () {
         pattern_name: patternName,
         added_by: req.userId,
         status: 'unsolved',
-        solved: 0
+        solved: 0,
+        topics: datasetEntry?.topics || [],
+        companies: datasetEntry?.companies || [],
       });
     } catch (err) {
       console.error('Add problem error:', err);

@@ -135,6 +135,67 @@ export default function GroupDetail() {
     setSearchResults([]);
   };
 
+  const upsertGroupProblem = (problem, currentUserStatus = 'unsolved') => {
+    setGroup(prev => {
+      if (!prev) return prev;
+
+      const normalizedProblem = {
+        ...problem,
+        member_statuses: prev.members.map(member => {
+          const existingStatus = problem.member_statuses?.find(status => status.user_id === member.id);
+          if (existingStatus) {
+            return existingStatus;
+          }
+
+          const status = member.id === user?.id ? currentUserStatus : 'unsolved';
+          return {
+            user_id: member.id,
+            username: member.username,
+            solved: status === 'solved' ? 1 : 0,
+            status,
+          };
+        }),
+      };
+
+      const nextProblems = prev.problems.some(existing => existing.id === normalizedProblem.id)
+        ? prev.problems.map(existing => (existing.id === normalizedProblem.id ? { ...existing, ...normalizedProblem } : existing))
+        : [...prev.problems, normalizedProblem];
+
+      nextProblems.sort((a, b) => a.leetcode_number - b.leetcode_number);
+
+      return {
+        ...prev,
+        problems: nextProblems,
+      };
+    });
+  };
+
+  const updateCurrentUserStatus = (problemId, nextStatus) => {
+    setGroup(prev => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        problems: prev.problems.map(problem => {
+          if (problem.id !== problemId) return problem;
+
+          return {
+            ...problem,
+            member_statuses: problem.member_statuses.map(memberStatus => (
+              memberStatus.user_id === user?.id
+                ? {
+                    ...memberStatus,
+                    status: nextStatus,
+                    solved: nextStatus === 'solved' ? 1 : 0,
+                  }
+                : memberStatus
+            )),
+          };
+        }),
+      };
+    });
+  };
+
   const handleAddProblem = async () => {
     if (!preview) return;
     setError('');
@@ -158,9 +219,9 @@ export default function GroupDetail() {
       }
       
       // Add problem to group
-      await api.post(`/groups/${id}/problems`, { problem_id: problemRes.data.id });
+      const addRes = await api.post(`/groups/${id}/problems`, { problem_id: problemRes.data.id });
+      upsertGroupProblem(addRes.data, problemRes.data.status || 'unsolved');
       resetProblemModal();
-      fetchGroup();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to add problem');
     }
@@ -168,9 +229,8 @@ export default function GroupDetail() {
 
   const handleAddFromProblemset = async (problem) => {
     try {
-      await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
-      fetchGroup();
-      // We don't close the modal so they can keep adding
+      const res = await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
+      upsertGroupProblem(res.data, problem.status || 'unsolved');
     } catch (err) {
       if (err.response?.status === 400 && err.response?.data?.error.includes('already in group')) {
         alert('Problem already exists in this group');
@@ -181,29 +241,31 @@ export default function GroupDetail() {
   };
 
   const handleAddMultipleFromProblemset = async (problemsToAdd) => {
-    let addedCount = 0;
-    let failedCount = 0;
+    const results = await Promise.allSettled(
+      problemsToAdd.map(async (problem) => {
+        const res = await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
+        return { addedProblem: res.data, sourceProblem: problem };
+      })
+    );
 
-    for (const problem of problemsToAdd) {
-      try {
-        await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
-        addedCount += 1;
-      } catch (err) {
-        failedCount += 1;
-      }
-    }
+    const succeeded = results
+      .filter(result => result.status === 'fulfilled')
+      .map(result => result.value);
 
-    if (addedCount > 0) {
-      fetchGroup();
-    }
+    succeeded.forEach(({ addedProblem, sourceProblem }) => {
+      upsertGroupProblem(addedProblem, sourceProblem.status || 'unsolved');
+    });
 
-    return { addedCount, failedCount };
+    return {
+      addedCount: succeeded.length,
+      failedCount: results.length - succeeded.length,
+    };
   };
 
   const handleSetStatus = async (problemId, nextStatus) => {
     try {
       await api.post(`/problems/${problemId}/status`, { status: nextStatus });
-      fetchGroup();
+      updateCurrentUserStatus(problemId, nextStatus);
     } catch (err) {
       console.error(err);
     }

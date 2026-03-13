@@ -90,16 +90,20 @@ export default function Problems() {
     if (!preview) return;
     setAddError('');
     try {
-      await api.post('/problems', { 
+      const res = await api.post('/problems', { 
         leetcode_number: preview.number,
         title: preview.title,
         difficulty: preview.difficulty,
         pattern_name: preview.topics?.[0] || null
       });
+      setAllProblems(prev => {
+        const exists = prev.some(problem => problem.id === res.data.id);
+        if (exists) return prev;
+        return [...prev, res.data].sort((a, b) => a.leetcode_number - b.leetcode_number);
+      });
       setShowAddModal(false);
       setPreview(null);
       setSearchQuery('');
-      fetchProblems();
     } catch (err) {
       setAddError(err.response?.data?.error || 'Failed to add problem');
     }
