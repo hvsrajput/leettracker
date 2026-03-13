@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "seed": "node db/seed-dynamodb.js",
-    "package": "zip -r lambda-deploy.zip index.js lambda.js lambda-backup.js backup.js package.json package-lock.json node_modules/ routes/ middleware/ db/dynamodb.js db/seed-dynamodb.js data/ .env"
+    "package": "zip -r lambda-deploy.zip index.js lambda.js lambda-backup.js backup.js package.json package-lock.json node_modules/ routes/ middleware/ db/dynamodb.js db/seed-dynamodb.js utils/ data/ .env"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
