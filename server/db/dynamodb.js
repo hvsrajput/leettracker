@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand, BatchWriteCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
 
 // Initialize DynamoDB client
 const client = new DynamoDBClient({
@@ -134,6 +134,38 @@ async function batchWrite(items) {
   }
 }
 
+async function batchGetItems(keys) {
+  if (!keys || keys.length === 0) {
+    return [];
+  }
+
+  const chunks = [];
+  for (let i = 0; i < keys.length; i += 100) {
+    chunks.push(keys.slice(i, i + 100));
+  }
+
+  const items = [];
+
+  for (const chunk of chunks) {
+    let requestItems = {
+      [TABLE_NAME]: {
+        Keys: chunk,
+      },
+    };
+
+    do {
+      const result = await docClient.send(new BatchGetCommand({
+        RequestItems: requestItems,
+      }));
+
+      items.push(...(result.Responses?.[TABLE_NAME] || []));
+      requestItems = result.UnprocessedKeys;
+    } while (requestItems && Object.keys(requestItems).length > 0);
+  }
+
+  return items;
+}
+
 module.exports = {
   docClient,
   TABLE_NAME,
@@ -144,4 +176,5 @@ module.exports = {
   updateItem,
   scanItems,
   batchWrite,
+  batchGetItems,
 };

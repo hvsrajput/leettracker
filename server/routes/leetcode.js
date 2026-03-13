@@ -2,17 +2,9 @@ const express = require('express');
 const axios = require('axios');
 const { auth } = require('../middleware/auth');
 const { putItem, getItem, queryItems } = require('../db/dynamodb');
+const { getProblemBySlug } = require('../utils/problemsDataset');
 
 const router = express.Router();
-
-// Load the problems dataset mapping for quick lookup by slug or id
-const problemsDataset = require('../data/problems.json');
-const datasetMapById = new Map();
-const datasetMapBySlug = new Map();
-problemsDataset.forEach(p => {
-  datasetMapById.set(p.number, p);
-  datasetMapBySlug.set(p.slug, p);
-});
 
 // Helper: fetch problem metadata from LeetCode GraphQL by titleSlug
 async function fetchProblemFromLeetCode(titleSlug) {
@@ -134,7 +126,7 @@ module.exports = function () {
       for (const [slug, unixTimestamp] of Object.entries(solvedMap)) {
         try {
           // Strict mapping against problems.json dataset
-          let problemData = datasetMapBySlug.get(slug);
+          let problemData = getProblemBySlug(slug);
           
           if (!problemData) {
             failedCount++; // Problem not in dataset
@@ -241,7 +233,7 @@ module.exports = function () {
       let alreadyTracked = 0;
 
       for (const slug of solvedSlugs) {
-        const problemData = datasetMapBySlug.get(slug);
+        const problemData = getProblemBySlug(slug);
         if (problemData) {
           const num = problemData.number;
           const ts = dateMap.get(slug) || defaultTimestamp;

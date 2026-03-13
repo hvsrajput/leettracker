@@ -1,13 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { auth } = require('../middleware/auth');
-const { putItem, getItem, queryItems, deleteItem } = require('../db/dynamodb');
+const { putItem, getItem, queryItems, deleteItem, batchGetItems } = require('../db/dynamodb');
+const { getProblemByNumber } = require('../utils/problemsDataset');
 
 const router = express.Router();
-const problemsDataset = require('../data/problems.json');
-const datasetMap = new Map();
-
-problemsDataset.forEach((problem) => datasetMap.set(problem.number, problem));
 
 module.exports = function () {
   // List user's groups
@@ -146,12 +143,11 @@ module.exports = function () {
       // Get group problems
       const groupProblemItems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
       const [problemDetails, memberProgressMaps] = await Promise.all([
-        Promise.all(
-          groupProblemItems.map(async (gp) => {
-            const lcNum = gp.SK.replace('PROBLEM#', '');
-            const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
-            return problem || null;
-          })
+        batchGetItems(
+          groupProblemItems.map((gp) => ({
+            PK: `PROBLEM#${gp.SK.replace('PROBLEM#', '')}`,
+            SK: 'DETAIL',
+          }))
         ),
         Promise.all(
           members.map(async (member) => {
@@ -179,7 +175,7 @@ module.exports = function () {
       const problems = problemDetails
         .filter(Boolean)
         .map((problem) => {
-          const datasetEntry = datasetMap.get(problem.leetcodeNumber);
+          const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
           const lcNum = String(problem.leetcodeNumber);
           const memberStatuses = members.map((member) => {
             const progress = progressByMemberId[member.id]?.[lcNum];
@@ -290,7 +286,7 @@ module.exports = function () {
       // Get problem details to return
       const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
       if (problem) {
-        const datasetEntry = datasetMap.get(problem.leetcodeNumber);
+        const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
         res.json({
           id: problem.leetcodeNumber,
           leetcode_number: problem.leetcodeNumber,

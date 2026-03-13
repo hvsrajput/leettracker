@@ -12,7 +12,9 @@ export function AuthProvider({ children }) {
     const savedUser = localStorage.getItem('user');
     if (token && savedUser) {
       setUser(JSON.parse(savedUser));
-      // Verify token is still valid
+      setLoading(false);
+
+      // Verify token in background so the app can render immediately.
       api.get('/auth/me')
         .then(res => {
           setUser(res.data);
@@ -23,7 +25,6 @@ export function AuthProvider({ children }) {
           localStorage.removeItem('user');
           setUser(null);
         })
-        .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }

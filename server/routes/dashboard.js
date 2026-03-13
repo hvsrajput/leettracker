@@ -1,18 +1,13 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
-const { queryItems, scanItems } = require('../db/dynamodb');
+const { queryItems, getItem, batchGetItems } = require('../db/dynamodb');
+const { getProblemsDataset } = require('../utils/problemsDataset');
 
 const router = express.Router();
 
 module.exports = function () {
   router.get('/', auth, async (req, res) => {
     try {
-      // Get all problems
-      const problems = await scanItems(
-        'begins_with(PK, :prefix) AND SK = :sk',
-        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
-      );
-
       // Get user progress
       const progressItems = await queryItems(`PROGRESS#${req.userId}`, 'PROB#');
       const progressMap = {};
@@ -22,8 +17,15 @@ module.exports = function () {
         progressMap[lcNum] = { solved: p.solved, solvedAt: p.solvedAt, status };
       });
 
-      // Filter to only problems the user is tracking
-      const trackedProblems = problems.filter(p => progressMap.hasOwnProperty(String(p.leetcodeNumber)));
+      const trackedProblems = await batchGetItems(
+        Object.keys(progressMap).map((lcNum) => ({
+          PK: `PROBLEM#${lcNum}`,
+          SK: 'DETAIL',
+        }))
+      );
+      const problemsById = new Map(
+        trackedProblems.map((problem) => [String(problem.leetcodeNumber), problem])
+      );
 
       const totalProblems = trackedProblems.length;
       let totalSolved = 0;
@@ -65,37 +67,37 @@ module.exports = function () {
 
       // Group progress
       const userGroups = await queryItems(`USERGROUP#${req.userId}`, 'GROUP#');
-      const groupStats = [];
-
-      for (const ug of userGroups) {
+      const groupStats = (await Promise.all(userGroups.map(async (ug) => {
         const groupId = ug.SK.replace('GROUP#', '');
-        const detail = await queryItems(`GROUP#${groupId}`, 'DETAIL');
-        if (!detail.length) continue;
+        const [detail, groupProblems, memberItems] = await Promise.all([
+          getItem(`GROUP#${groupId}`, 'DETAIL'),
+          queryItems(`GROUP#${groupId}`, 'PROBLEM#'),
+          queryItems(`GROUP#${groupId}`, 'MEMBER#'),
+        ]);
 
-        const groupProblems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
-        const memberItems = await queryItems(`GROUP#${groupId}`, 'MEMBER#');
-
-        // Count solved by user
-        let solvedCount = 0;
-        for (const gp of groupProblems) {
-          const lcNum = gp.SK.replace('PROBLEM#', '');
-          if (progressMap[lcNum]?.solved === 1) solvedCount++;
+        if (!detail) {
+          return null;
         }
 
-        groupStats.push({
+        const solvedCount = groupProblems.reduce((count, gp) => {
+          const lcNum = gp.SK.replace('PROBLEM#', '');
+          return count + (progressMap[lcNum]?.solved === 1 ? 1 : 0);
+        }, 0);
+
+        return {
           id: groupId,
-          name: detail[0].name,
+          name: detail.name,
           total_problems: groupProblems.length,
           solved_problems: solvedCount,
           member_count: memberItems.length,
-        });
-      }
+        };
+      }))).filter(Boolean);
 
       // Recent activity — filter progress for solved items and sort
       const recentSolved = [];
       for (const [lcNum, prog] of Object.entries(progressMap)) {
         if (prog.solved === 1) {
-          const problem = problems.find(p => String(p.leetcodeNumber) === lcNum);
+          const problem = problemsById.get(lcNum);
           if (problem) {
             recentSolved.push({
               leetcode_number: problem.leetcodeNumber,
@@ -169,11 +171,6 @@ module.exports = function () {
   router.get('/pattern-heatmap/:userId', auth, async (req, res) => {
     try {
       const uId = req.params.userId === 'me' ? req.userId : req.params.userId;
-      
-      const problems = await scanItems(
-        'begins_with(PK, :prefix) AND SK = :sk',
-        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
-      );
 
       const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
       const progressMap = {};
@@ -182,7 +179,12 @@ module.exports = function () {
       });
 
       const patternMap = {};
-      const trackedProblems = problems.filter(p => progressMap.hasOwnProperty(String(p.leetcodeNumber)));
+      const trackedProblems = await batchGetItems(
+        Object.keys(progressMap).map((lcNum) => ({
+          PK: `PROBLEM#${lcNum}`,
+          SK: 'DETAIL',
+        }))
+      );
 
       trackedProblems.forEach(p => {
         if (p.patternName) {
@@ -237,19 +239,8 @@ module.exports = function () {
   router.get('/company-progress/:userId', auth, async (req, res) => {
     try {
       const uId = req.params.userId === 'me' ? req.userId : req.params.userId;
-      
-      const problems = await scanItems(
-        'begins_with(PK, :prefix) AND SK = :sk',
-        { ':prefix': 'PROBLEM#', ':sk': 'DETAIL' }
-      );
 
-      // We need to fetch the company data from the raw dataset, since DynamoDB might not have it yet
-      // if not backfilled, but we can backfill or join on the fly.
-      const problemsDataset = require('../data/problems.json');
-      const companyDataMap = {};
-      problemsDataset.forEach(p => {
-        companyDataMap[p.number] = p.companies || [];
-      });
+      const problemsDataset = getProblemsDataset();
 
       const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
       const progressMap = {};
