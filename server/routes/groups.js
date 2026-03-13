@@ -15,23 +15,29 @@ module.exports = function () {
     try {
       // Get all groups the user belongs to
       const userGroups = await queryItems(`USERGROUP#${req.userId}`, 'GROUP#');
+      const progressItems = await queryItems(`PROGRESS#${req.userId}`, 'PROB#');
+      const progressMap = {};
 
-      const groups = [];
-      for (const ug of userGroups) {
+      progressItems.forEach((progress) => {
+        const lcNum = progress.SK.replace('PROB#', '');
+        progressMap[lcNum] = progress.status || (progress.solved === 1 ? 'solved' : 'unsolved');
+      });
+
+      const groups = (await Promise.all(userGroups.map(async (ug) => {
         const groupId = ug.SK.replace('GROUP#', '');
-        const detail = await getItem(`GROUP#${groupId}`, 'DETAIL');
-        if (!detail) continue;
+        const [detail, members, problems] = await Promise.all([
+          getItem(`GROUP#${groupId}`, 'DETAIL'),
+          queryItems(`GROUP#${groupId}`, 'MEMBER#'),
+          queryItems(`GROUP#${groupId}`, 'PROBLEM#'),
+        ]);
 
-        // Count members and problems
-        const members = await queryItems(`GROUP#${groupId}`, 'MEMBER#');
-        const problems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
+        if (!detail) return null;
         let solved_count = 0;
         let attempted_count = 0;
 
         for (const problem of problems) {
           const lcNum = problem.SK.replace('PROBLEM#', '');
-          const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${lcNum}`);
-          const status = progress?.status || (progress?.solved === 1 ? 'solved' : 'unsolved');
+          const status = progressMap[lcNum] || 'unsolved';
 
           if (status === 'solved') {
             solved_count += 1;
@@ -40,7 +46,7 @@ module.exports = function () {
           }
         }
 
-        groups.push({
+        return {
           id: groupId,
           name: detail.name,
           created_by: detail.createdBy,
@@ -51,8 +57,8 @@ module.exports = function () {
           solved_count,
           attempted_count,
           unsolved_count: Math.max(problems.length - solved_count - attempted_count, 0),
-        });
-      }
+        };
+      }))).filter(Boolean);
 
       // Sort by created_at descending
       groups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

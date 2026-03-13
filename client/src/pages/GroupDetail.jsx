@@ -506,7 +506,8 @@ export default function GroupDetail() {
               <span className="w-16 flex-shrink-0">#</span>
               <span className="w-64 flex-shrink-0">Problem</span>
               <span className="w-32 flex-shrink-0">Difficulty</span>
-              <div className="flex-1 flex justify-between px-4 gap-8">
+              <span className="min-w-[320px] flex-1 pr-6">Topics</span>
+              <div className="flex flex-none justify-end gap-6 pl-6">
                 {group.members?.map(m => (
                   <div className="w-24 flex-shrink-0 text-center" key={m.id} title={m.username}>
                     <div className="truncate">{m.username.substring(0, 5)}</div>
@@ -543,7 +544,19 @@ export default function GroupDetail() {
                       {p.difficulty}
                     </span>
                   </span>
-                  <div className="flex-1 flex justify-between px-4 gap-8">
+                  <div className="min-w-[320px] flex-1 flex flex-wrap gap-2 pr-6">
+                    {p.topics?.length ? p.topics.map(topic => (
+                      <span
+                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                        key={topic}
+                      >
+                        {topic}
+                      </span>
+                    )) : (
+                      <span className="text-xs text-gray-500">No topics</span>
+                    )}
+                  </div>
+                  <div className="flex flex-none justify-end gap-6 pl-6">
                     {p.member_statuses?.map(ms => (
                       <div className="w-24 flex-shrink-0 flex justify-center gap-3" key={ms.user_id}>
                         {renderStatusControl(p.id, ms, 'attempted', ms.user_id === user?.id)}
