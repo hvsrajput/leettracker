@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../api';
 import LeetCodeImport from '../components/LeetCodeImport';
+import { COMPANY_OPTIONS, getProblemTopics } from '../utils/problemFilters';
 
 export default function Problems() {
   const [allProblems, setAllProblems] = useState([]);
@@ -36,16 +37,7 @@ export default function Problems() {
 
   // Compute dynamic topic tabs from all problems
   const dynamicPatterns = useMemo(() => {
-    const topicSet = new Set();
-    allProblems.forEach(p => {
-      if (p.topics && Array.isArray(p.topics)) {
-        p.topics.forEach(t => topicSet.add(t));
-      }
-      if (p.pattern_name) {
-        topicSet.add(p.pattern_name); // Legacy fallback
-      }
-    });
-    return Array.from(topicSet).sort();
+    return getProblemTopics(allProblems);
   }, [allProblems]);
 
   // Apply filters on the frontend
@@ -298,14 +290,9 @@ export default function Problems() {
               onChange={e => setCompanyFilter(e.target.value)}
             >
               <option value="">Any Company</option>
-              <option value="Amazon">Amazon</option>
-              <option value="Google">Google</option>
-              <option value="Meta">Meta</option>
-              <option value="Microsoft">Microsoft</option>
-              <option value="Apple">Apple</option>
-              <option value="Uber">Uber</option>
-              <option value="Adobe">Adobe</option>
-              <option value="Netflix">Netflix</option>
+              {COMPANY_OPTIONS.map(company => (
+                <option key={company} value={company}>{company}</option>
+              ))}
             </select>
             <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setCompanyFilter('')}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>

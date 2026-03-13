@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import AddFromProblemsetModal from '../components/groups/AddFromProblemsetModal';
+import { COMPANY_OPTIONS, getProblemTopics } from '../utils/problemFilters';
 
 export default function GroupDetail() {
   const { id } = useParams();
@@ -10,6 +11,7 @@ export default function GroupDetail() {
   const navigate = useNavigate();
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [allProblems, setAllProblems] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showAddProblem, setShowAddProblem] = useState(false);
   const [showAddFromProblemset, setShowAddFromProblemset] = useState(false);
@@ -21,6 +23,7 @@ export default function GroupDetail() {
   const [activePattern, setActivePattern] = useState('all');
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [solvedFilter, setSolvedFilter] = useState('');
+  const [groupStatusFilter, setGroupStatusFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
 
   // Search state
@@ -38,18 +41,35 @@ export default function GroupDetail() {
 
   useEffect(() => { fetchGroup(); }, [id]);
 
-  // Extract unique patterns from group problems
-  const patterns = useMemo(() => {
-    if (!group?.problems) return [];
-    const patternSet = new Set();
-    group.problems.forEach(p => {
-      if (p.topics && Array.isArray(p.topics)) {
-        p.topics.forEach(t => patternSet.add(t));
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchProblems = async () => {
+      try {
+        const res = await api.get('/problems');
+        if (isMounted) {
+          setAllProblems(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load problems for group filters', err);
       }
-      if (p.pattern_name) patternSet.add(p.pattern_name);
-    });
-    return Array.from(patternSet).sort();
-  }, [group]);
+    };
+
+    fetchProblems();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const patterns = useMemo(() => {
+    const allProblemTopics = getProblemTopics(allProblems);
+    if (allProblemTopics.length > 0) {
+      return allProblemTopics;
+    }
+
+    return getProblemTopics(group?.problems || []);
+  }, [allProblems, group]);
 
   // Filter problems by active pattern and other filters
   const filteredProblems = useMemo(() => {
@@ -57,7 +77,9 @@ export default function GroupDetail() {
     
     return group.problems.filter(p => {
       // Pattern filter
-      if (activePattern !== 'all' && !(p.topics?.includes(activePattern) || p.pattern_name === activePattern)) return false;
+      const matchPattern = activePattern === 'all' || 
+                           (p.topics?.includes(activePattern) || p.pattern_name === activePattern);
+      if (!matchPattern) return false;
       
       // Difficulty filter
       if (difficultyFilter && p.difficulty !== difficultyFilter) return false;
@@ -65,17 +87,24 @@ export default function GroupDetail() {
       // Company filter
       if (companyFilter && (!p.companies || !p.companies.includes(companyFilter))) return false;
       
-      // Group Solved Filter (any member solved vs none)
+      // Personal Status Filter (match behavior of Problems page)
       if (solvedFilter) {
+        const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
+        if (solvedFilter === 'true' && myStatus !== 'solved') return false;
+        if (solvedFilter === 'false' && myStatus !== 'unsolved') return false;
+        if (solvedFilter === 'attempted' && myStatus !== 'attempted') return false;
+      }
+
+      // Group Status Filter (any member solved vs none)
+      if (groupStatusFilter) {
         const anySolved = p.member_statuses?.some(ms => ms.solved);
-        // true = at least one solved, false = no one solved
-        if (solvedFilter === 'true' && !anySolved) return false;
-        if (solvedFilter === 'false' && anySolved) return false;
+        if (groupStatusFilter === 'true' && !anySolved) return false;
+        if (groupStatusFilter === 'false' && anySolved) return false;
       }
       
       return true;
     });
-  }, [group, activePattern, difficultyFilter, solvedFilter, companyFilter]);
+  }, [group, user, activePattern, difficultyFilter, solvedFilter, groupStatusFilter, companyFilter]);
 
   const handleAddMember = async () => {
     if (!username.trim()) return;
@@ -252,48 +281,44 @@ export default function GroupDetail() {
       </div>
 
       {/* Dynamic Pattern Tabs */}
-      {patterns.length > 0 && (
-        <div className="flex flex-wrap gap-3 mb-4 mt-6">
-          <button 
-            onClick={() => setActivePattern('all')}
-            className={`transition-all ${activePattern === 'all' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-          >
-            All
-          </button>
-          {patterns.map(p => (
-             <button 
-               key={p}
-               onClick={() => setActivePattern(p)}
-               className={`transition-all ${activePattern === p ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-             >
-               {p}
-             </button>
-          ))}
-        </div>
-      )}
-
-      {patterns.length > 0 && (
-        <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="mb-6 mt-4 flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
-          <svg className={`w-4 h-4 transform transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-          Advanced Filters
+      <div className="flex flex-wrap gap-3 mb-4 mt-6">
+        <button 
+          onClick={() => setActivePattern('all')}
+          className={`transition-all ${activePattern === 'all' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+        >
+          All
         </button>
-      )}
+        {patterns.map(p => (
+           <button 
+             key={p}
+             onClick={() => setActivePattern(p)}
+             className={`transition-all ${activePattern === p ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
+           >
+             {p}
+           </button>
+        ))}
+      </div>
+
+      <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="mb-6 mt-4 flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+        <svg className={`w-4 h-4 transform transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+        Advanced Filters
+      </button>
 
       {/* Advanced Filter Panel */}
-      {showAdvancedFilters && patterns.length > 0 && (
+      {showAdvancedFilters && (
         <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 shadow-lg shadow-black/20 animate-fade-in">
           <h3 className="text-sm font-medium text-gray-300 mb-4 flex items-center gap-2">
             Match <span className="bg-black/50 px-2 py-1 rounded text-white border border-white/10">All</span> of the following filters:
           </h3>
           
           <div className="space-y-3">
-            {/* Status Filter */}
+            {/* Personal Status Filter */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
               <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
-                <span className="text-sm">Group Status</span>
+                <span className="text-sm">My Status</span>
               </div>
               <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
                 <span>is</span>
@@ -305,10 +330,36 @@ export default function GroupDetail() {
                 onChange={e => setSolvedFilter(e.target.value)}
               >
                 <option value="">Any Status</option>
+                <option value="true">Solved</option>
+                <option value="attempted">Attempted</option>
+                <option value="false">Unsolved</option>
+              </select>
+              <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setSolvedFilter('')}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
+              </button>
+            </div>
+            {/* Group Status Filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full group">
+              <div className="flex items-center gap-2 w-32 flex-shrink-0 text-gray-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
+                <span className="text-sm">Group Status</span>
+              </div>
+              <div className="flex items-center bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 w-24 flex-shrink-0">
+                <span>is</span>
+                <svg className="w-3 h-3 ml-auto opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </div>
+              <select 
+                className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-200 outline-none focus:border-indigo-500 appearance-none bg-no-repeat bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5H7z%22%20fill%3D%22%23ffffff40%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] pr-10"
+                value={groupStatusFilter} 
+                onChange={e => setGroupStatusFilter(e.target.value)}
+              >
+                <option value="">Any Group Status</option>
                 <option value="true">Solved by Anyone</option>
                 <option value="false">Unsolved by All</option>
               </select>
-              <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setSolvedFilter('')}>
+              <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setGroupStatusFilter('')}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
               </button>
             </div>
@@ -384,14 +435,9 @@ export default function GroupDetail() {
                 onChange={e => setCompanyFilter(e.target.value)}
               >
                 <option value="">Any Company</option>
-                <option value="Amazon">Amazon</option>
-                <option value="Google">Google</option>
-                <option value="Meta">Meta</option>
-                <option value="Microsoft">Microsoft</option>
-                <option value="Apple">Apple</option>
-                <option value="Uber">Uber</option>
-                <option value="Adobe">Adobe</option>
-                <option value="Netflix">Netflix</option>
+                {COMPANY_OPTIONS.map(company => (
+                  <option key={company} value={company}>{company}</option>
+                ))}
               </select>
               <button className="p-1.5 text-gray-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" onClick={() => setCompanyFilter('')}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" /></svg>
@@ -403,7 +449,7 @@ export default function GroupDetail() {
           <div className="mt-6 flex justify-end items-center border-t border-white/10 pt-4">
             <button 
               className="text-gray-400 hover:text-white font-medium text-sm flex items-center gap-2 transition-colors"
-              onClick={() => { setDifficultyFilter(''); setSolvedFilter(''); setCompanyFilter(''); setActivePattern('all'); }}
+              onClick={() => { setDifficultyFilter(''); setSolvedFilter(''); setGroupStatusFilter(''); setCompanyFilter(''); setActivePattern('all'); }}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
               Reset

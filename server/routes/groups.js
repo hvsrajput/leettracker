@@ -126,6 +126,7 @@ module.exports = function () {
             user_id: member.id,
             username: member.username,
             solved: progress ? progress.solved : 0,
+            status: progress?.status || (progress?.solved === 1 ? 'solved' : 'unsolved'),
           });
         }
 
