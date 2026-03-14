@@ -47,7 +47,10 @@ export default function Problems() {
       const matchPattern = activePattern === 'all' || 
                            (p.topics?.includes(activePattern) || p.pattern_name === activePattern);
       const matchDifficulty = !difficultyFilter || p.difficulty === difficultyFilter;
-      const matchSolved = !solvedFilter || p.status === solvedFilter;
+      const matchSolved = !solvedFilter
+        || (solvedFilter === 'true' && p.status === 'solved')
+        || (solvedFilter === 'false' && p.status === 'unsolved')
+        || (solvedFilter === 'attempted' && p.status === 'attempted');
       const matchCompany = !companyFilter || p.companies?.includes(companyFilter);
       return matchPattern && matchDifficulty && matchSolved && matchCompany;
     });
