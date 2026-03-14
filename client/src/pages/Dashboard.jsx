@@ -1,7 +1,44 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Heatmap from '../components/Heatmap';
+
+function hasVisibleHeatmapActivity(data, year) {
+  const entries = Object.entries(data || {}).filter(([, count]) => count > 0);
+  if (entries.length === 0) {
+    return false;
+  }
+
+  const currentYear = new Date().getFullYear();
+  if (year !== currentYear) {
+    return entries.some(([date]) => date.startsWith(`${year}-`));
+  }
+
+  const endDate = new Date();
+  endDate.setHours(0, 0, 0, 0);
+
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 364);
+
+  return entries.some(([date]) => {
+    const dateObj = new Date(`${date}T00:00:00`);
+    return dateObj >= startDate && dateObj <= endDate;
+  });
+}
+
+function getBestHeatmapYear(data) {
+  const currentYear = new Date().getFullYear();
+  if (hasVisibleHeatmapActivity(data, currentYear)) {
+    return currentYear;
+  }
+
+  const years = Object.entries(data || {})
+    .filter(([, count]) => count > 0)
+    .map(([date]) => Number(date.slice(0, 4)))
+    .filter(Number.isFinite);
+
+  return years.length > 0 ? Math.max(...years) : currentYear;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -9,41 +46,76 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [heatmapData, setHeatmapData] = useState({});
   const [heatmapLoading, setHeatmapLoading] = useState(true);
-  const [heatmapGroup, setHeatmapGroup] = useState('me'); // 'me' or groupId
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [patternHeatmap, setPatternHeatmap] = useState(null);
   const [companyProgress, setCompanyProgress] = useState(null);
-  const hasBootstrappedHeatmap = useRef(false);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const applyHeatmapData = (nextHeatmapData) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setHeatmapData(nextHeatmapData);
+      setSelectedYear((prevYear) => (
+        hasVisibleHeatmapActivity(nextHeatmapData, prevYear)
+          ? prevYear
+          : getBestHeatmapYear(nextHeatmapData)
+      ));
+    };
+
+    const loadFallbackHeatmap = async () => {
+      try {
+        const heatmapRes = await api.getCached('/dashboard/heatmap?groupId=me', {}, 30000);
+        applyHeatmapData(heatmapRes.data || {});
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (isMounted) {
+          setHeatmapLoading(false);
+        }
+      }
+    };
+
     api.getCached('/dashboard', {}, 15000)
-    .then((dashRes) => {
-      setStats(dashRes.data);
-      setPatternHeatmap(dashRes.data.patternHeatmap || null);
-      setCompanyProgress(dashRes.data.companyProgress || null);
-      setHeatmapData(dashRes.data.heatmapData || {});
-      hasBootstrappedHeatmap.current = true;
-    })
-    .catch(console.error)
-    .finally(() => {
-      setLoading(false);
-      setHeatmapLoading(false);
-    });
+      .then((dashRes) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const nextStats = dashRes.data || {};
+        const initialHeatmapData = nextStats.heatmapData || {};
+
+        setStats(nextStats);
+        setPatternHeatmap(nextStats.patternHeatmap || null);
+        setCompanyProgress(nextStats.companyProgress || null);
+
+        if (Object.keys(initialHeatmapData).length > 0) {
+          applyHeatmapData(initialHeatmapData);
+          setHeatmapLoading(false);
+        } else {
+          loadFallbackHeatmap();
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        if (isMounted) {
+          setHeatmapLoading(false);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  useEffect(() => {
-    if (heatmapGroup === 'me' && hasBootstrappedHeatmap.current) {
-      hasBootstrappedHeatmap.current = false;
-      return;
-    }
-
-    setHeatmapLoading(true);
-    api.getCached(`/dashboard/heatmap?groupId=${heatmapGroup}`, {}, 30000)
-      .then(res => setHeatmapData(res.data))
-      .catch(console.error)
-      .finally(() => setHeatmapLoading(false));
-  }, [heatmapGroup]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading dashboard...</div>;

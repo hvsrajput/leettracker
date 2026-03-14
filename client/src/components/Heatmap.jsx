@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export default function Heatmap({ data = {}, year = new Date().getFullYear() }) {
   const containerRef = useRef(null);
@@ -13,16 +13,34 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
   const MAX_CELL = 18;
   const WEEKS = 53;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!containerRef.current) return;
+
     const el = containerRef.current;
-    const ro = new ResizeObserver(entries => {
-      for (let entry of entries) {
-        setContainerWidth(Math.floor(entry.contentRect.width));
+    const measure = () => {
+      const nextWidth = Math.floor(el.getBoundingClientRect().width || el.clientWidth || window.innerWidth || 0);
+      if (nextWidth > 0) {
+        setContainerWidth(nextWidth);
       }
+    };
+
+    measure();
+
+    const rafId = window.requestAnimationFrame(measure);
+    const timeoutId = window.setTimeout(measure, 80);
+    window.addEventListener('resize', measure);
+
+    const ro = new ResizeObserver(() => {
+      measure();
     });
     ro.observe(el);
-    return () => ro.disconnect();
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('resize', measure);
+      ro.disconnect();
+    };
   }, []);
 
   const { cellSizePx, gapPx } = useMemo(() => {
@@ -125,7 +143,7 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
 
       <div className="w-full overflow-x-auto pb-2">
         <div 
-          className="grid grid-flow-col min-w-max mx-auto"
+          className="inline-grid grid-flow-col min-w-max"
           style={{ 
             gridTemplateColumns: `repeat(${maxWeek}, ${cellSizePx}px)`,
             gridTemplateRows: `repeat(7, ${cellSizePx}px)`,
