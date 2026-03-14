@@ -50,6 +50,10 @@ async function fetchProblemFromLeetCode(titleSlug) {
   }
 }
 
+async function resolveProblemData(titleSlug) {
+  return getProblemBySlug(titleSlug) || await fetchProblemFromLeetCode(titleSlug);
+}
+
 // Helper: ensure problem exists in DB, create if not
 async function ensureProblemExists(problemData, userId) {
   const num = problemData.number;
@@ -112,16 +116,23 @@ async function updateProgress(userId, num, newStatus, timestamp) {
 
 async function fetchAcceptedProblemData(username) {
   const profileQuery = `
-    query userProfileUserQuestionProgressV2($userSlug: String!) {
-      userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-        acceptedQuestionList { titleSlug }
+    query userPublicProfile($username: String!) {
+      matchedUser(username: $username) {
+        username
+        submitStatsGlobal {
+          acSubmissionNum {
+            difficulty
+            count
+            submissions
+          }
+        }
       }
     }
   `;
 
   const response = await axios.post('https://leetcode.com/graphql', {
     query: profileQuery,
-    variables: { userSlug: username }
+    variables: { username }
   }, {
     headers: {
       'Content-Type': 'application/json',
@@ -136,22 +147,29 @@ async function fetchAcceptedProblemData(username) {
     throw new Error(response.data.errors[0].message || 'LeetCode profile lookup failed');
   }
 
-  const progressData = response.data?.data?.userProfileUserQuestionProgressV2;
-  if (!progressData) {
+  const profile = response.data?.data?.matchedUser;
+  if (!profile) {
     const error = new Error('Could not find a public LeetCode profile for that username');
     error.statusCode = 404;
     throw error;
   }
 
-  return progressData.acceptedQuestionList || [];
+  const totalSolved = profile.submitStatsGlobal?.acSubmissionNum?.find(
+    (item) => item.difficulty === 'All'
+  )?.count || 0;
+
+  return {
+    username: profile.username,
+    totalSolved,
+  };
 }
 
 async function fetchRecentAcceptedSubmissionDates(username) {
   const subQuery = `
-    query recentSubmissionList($username: String!, $limit: Int!) {
-      recentSubmissionList(username: $username, limit: $limit) {
+    query recentAcSubmissionList($username: String!, $limit: Int!) {
+      recentAcSubmissionList(username: $username, limit: $limit) {
+        title
         titleSlug
-        statusDisplay
         timestamp
       }
     }
@@ -159,7 +177,7 @@ async function fetchRecentAcceptedSubmissionDates(username) {
 
   const response = await axios.post('https://leetcode.com/graphql', {
     query: subQuery,
-    variables: { username, limit: 20 }
+    variables: { username, limit: 50 }
   }, {
     headers: {
       'Content-Type': 'application/json',
@@ -174,7 +192,7 @@ async function fetchRecentAcceptedSubmissionDates(username) {
     throw new Error(response.data.errors[0].message || 'Failed to fetch recent submissions');
   }
 
-  return response.data?.data?.recentSubmissionList || [];
+  return response.data?.data?.recentAcSubmissionList || [];
 }
 
 module.exports = function () {
@@ -192,8 +210,7 @@ module.exports = function () {
 
       for (const [slug, unixTimestamp] of Object.entries(solvedMap)) {
         try {
-          // Strict mapping against problems.json dataset
-          let problemData = getProblemBySlug(slug);
+          let problemData = await resolveProblemData(slug);
           
           if (!problemData) {
             failedCount++; // Problem not in dataset
@@ -237,37 +254,35 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      const solvedSlugs = new Set();
-      const dateMap = new Map();
+      const { totalSolved } = await fetchAcceptedProblemData(username);
+      const recentAcceptedSubmissions = await fetchRecentAcceptedSubmissionDates(username);
+      const recentSubmissionMap = new Map();
 
-      const accepted = await fetchAcceptedProblemData(username);
-      accepted.forEach((problem) => solvedSlugs.add(problem.titleSlug));
-
-      try {
-        const recentSubmissions = await fetchRecentAcceptedSubmissionDates(username);
-        recentSubmissions.forEach((submission) => {
-          if (submission.statusDisplay === 'Accepted' && !dateMap.has(submission.titleSlug)) {
-            dateMap.set(submission.titleSlug, new Date(parseInt(submission.timestamp, 10) * 1000).toISOString());
-          }
-        });
-      } catch (err) {
-        // Exact timestamps are optional for instant sync, so keep going if this secondary query fails.
-        console.error('Recent submission sync warning:', err.message);
-      }
+      recentAcceptedSubmissions.forEach((submission) => {
+        if (!recentSubmissionMap.has(submission.titleSlug)) {
+          recentSubmissionMap.set(
+            submission.titleSlug,
+            new Date(parseInt(submission.timestamp, 10) * 1000).toISOString()
+          );
+        }
+      });
 
       const defaultTimestamp = new Date().toISOString();
       let newlyImported = 0;
       let alreadyTracked = 0;
+      let failed = 0;
 
-      for (const slug of solvedSlugs) {
-        const problemData = getProblemBySlug(slug);
+      for (const [slug, timestamp] of recentSubmissionMap.entries()) {
+        const problemData = await resolveProblemData(slug);
         if (problemData) {
           const num = problemData.number;
-          const ts = dateMap.get(slug) || defaultTimestamp;
+          const ts = timestamp || defaultTimestamp;
           await ensureProblemExists(problemData, req.userId);
           const result = await updateProgress(req.userId, num, 'solved', ts);
           if (result === 'solved') newlyImported++;
           else alreadyTracked++;
+        } else {
+          failed++;
         }
       }
 
@@ -275,7 +290,9 @@ module.exports = function () {
         success: true, 
         newlyImported, 
         alreadyTracked, 
-        totalFound: solvedSlugs.size 
+        failed,
+        totalFound: recentSubmissionMap.size,
+        totalSolvedOnLeetCode: totalSolved,
       });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);

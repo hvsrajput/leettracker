@@ -6,7 +6,6 @@ export default function Profile() {
   const { user, updateUser } = useAuth();
   const [leetcodeUsername, setLeetcodeUsername] = useState(user?.leetcodeUsername || '');
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState(null);
   
   useEffect(() => {
@@ -38,34 +37,6 @@ export default function Profile() {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save settings' });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setMessage(null);
-    try {
-      const normalizedUsername = leetcodeUsername.trim() || user?.leetcodeUsername || '';
-
-      if (!normalizedUsername) {
-        setMessage({ type: 'error', text: 'Please add your LeetCode username before syncing.' });
-        return;
-      }
-
-      if (normalizedUsername !== user?.leetcodeUsername) {
-        await saveLeetCodeUsername(normalizedUsername);
-      }
-
-      const res = await api.post('/leetcode/sync');
-      const { newlyImported, alreadyTracked } = res.data;
-      let msg = `Sync successful! Found ${newlyImported + alreadyTracked} solved problems.`;
-      if (newlyImported > 0) msg += ` Imported ${newlyImported} new ones.`;
-      else msg += ` All up to date.`;
-      setMessage({ type: 'success', text: msg });
-    } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to sync from LeetCode. Ensure your username is correct.' });
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -111,7 +82,7 @@ export default function Profile() {
             <h2 className="text-xl font-bold text-white">LeetCode Configuration</h2>
           </div>
           <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-            Connect your LeetCode account to automatically sync your completed public problems via their GraphQL APIs.
+            Save your public LeetCode username here. Syncing is available from the Problems page import flow.
           </p>
 
           <form onSubmit={handleSave} className="space-y-4">
@@ -134,26 +105,6 @@ export default function Profile() {
               {saving ? 'Saving...' : 'Update Username'}
             </button>
           </form>
-
-          {user?.leetcodeUsername && (
-            <div className="mt-8 pt-6 border-t border-white/10">
-              <h3 className="text-lg font-semibold text-white mb-2">Automated Data Sync Status</h3>
-              <p className="text-sm text-gray-400 mb-4 leading-relaxed">Fetch your latest solved and attempted submissions instantly.</p>
-              <button 
-                onClick={handleSync} 
-                className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-[#FFA116]/10 text-[#FFA116] font-medium hover:bg-[#FFA116]/20 border border-[#FFA116]/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2" 
-                disabled={syncing}
-              >
-                {syncing && (
-                  <svg className="animate-spin h-4 w-4 text-[currentColor]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                )}
-                {syncing ? 'Syncing...' : 'Quick Sync Public Data'}
-              </button>
-            </div>
-          )}
 
           {message && (
             <div className={`mt-6 p-4 rounded-xl border flex items-start gap-3 text-sm ${

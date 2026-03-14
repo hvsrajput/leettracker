@@ -11,7 +11,7 @@ export default function Groups() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/groups')
+    api.getCached('/groups', {}, 15000)
       .then(res => setGroups(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));

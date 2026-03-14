@@ -17,9 +17,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/dashboard'),
-      api.get('/dashboard/pattern-heatmap/me'),
-      api.get('/dashboard/company-progress/me')
+      api.getCached('/dashboard', {}, 15000),
+      api.getCached('/dashboard/pattern-heatmap/me', {}, 15000),
+      api.getCached('/dashboard/company-progress/me', {}, 15000)
     ])
     .then(([dashRes, patternRes, companyRes]) => {
       setStats(dashRes.data);
@@ -32,7 +32,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setHeatmapLoading(true);
-    api.get(`/dashboard/heatmap?groupId=${heatmapGroup}&year=${selectedYear}`)
+    api.getCached(`/dashboard/heatmap?groupId=${heatmapGroup}&year=${selectedYear}`, {}, 30000)
       .then(res => setHeatmapData(res.data))
       .catch(console.error)
       .finally(() => setHeatmapLoading(false));

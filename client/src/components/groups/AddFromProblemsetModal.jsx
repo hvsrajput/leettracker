@@ -23,7 +23,7 @@ export default function AddFromProblemsetModal({ isOpen, onClose, onAddProblem, 
   const loadProblems = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/problems');
+      const res = await api.getCached('/problems', {}, 10000);
       setProblems(res.data);
     } catch (err) {
       console.error('Failed to load problems:', err);

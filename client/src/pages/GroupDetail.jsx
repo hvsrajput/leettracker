@@ -33,7 +33,7 @@ export default function GroupDetail() {
   const [preview, setPreview] = useState(null);
 
   const fetchGroup = () => {
-    api.get(`/groups/${id}`)
+    api.getCached(`/groups/${id}`, {}, 10000)
       .then(res => setGroup(res.data))
       .catch(() => navigate('/groups'))
       .finally(() => setLoading(false));

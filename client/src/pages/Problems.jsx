@@ -25,7 +25,7 @@ export default function Problems() {
 
   const fetchProblems = () => {
     setLoading(true);
-    api.get('/problems')
+    api.getCached('/problems', {}, 10000)
       .then(res => setAllProblems(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));

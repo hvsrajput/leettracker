@@ -245,17 +245,20 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
       // 2. Trigger sync
       const resp = await api.post('/leetcode/sync');
-      const { newlyImported, alreadyTracked, totalFound } = resp.data;
+      const { newlyImported, alreadyTracked, totalFound, failed = 0, totalSolvedOnLeetCode = 0 } = resp.data;
       
       setResult({
+        mode: 'recent-sync',
         solved: newlyImported,
         alreadyExists: alreadyTracked,
-        failed: totalFound - (newlyImported + alreadyTracked),
-        total: totalFound
+        failed,
+        total: totalFound,
+        totalSolvedOnLeetCode,
       });
       setStep(4);
       if (onSuccess) onSuccess();
     } catch (err) {
+      setStep(5);
       setError(err.response?.data?.error || 'Sync failed. Check your username and privacy settings on LeetCode.');
     } finally {
       setLoading(false);
@@ -304,6 +307,11 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
       {/* ── STEP 0: Selection ── */}
       {step === 0 && (
         <div className="space-y-6 animate-fade-in">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4">
             <button 
               onClick={() => {
@@ -325,7 +333,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
                 </div>
               </div>
               <p className="text-sm text-gray-400 leading-relaxed">
-                Uses your public profile to import recently solved problems. Fast and easy, but limited to the last 20 exact dates.
+                Uses your public profile to import recently solved problems. Fast and easy, but limited to your most recent public accepted submissions.
               </p>
             </button>
 
@@ -398,7 +406,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p className="text-gray-400 animate-pulse">Fetching your LeetCode progress...</p>
+            <p className="text-gray-400 animate-pulse">Fetching your recent LeetCode accepted submissions...</p>
          </div>
       )}
 
@@ -528,13 +536,19 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-red-400">{result.failed}</div>
-              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Not in Dataset</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Failed</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-white">{result.total}</div>
-              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Total Found</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{result.mode === 'recent-sync' ? 'Recent Found' : 'Total Found'}</div>
             </div>
           </div>
+
+          {result.mode === 'recent-sync' && result.total === 0 && result.totalSolvedOnLeetCode > 0 && (
+            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+              No recent accepted submissions were available to import right now. Use Advanced Import once if you want your full LeetCode history.
+            </div>
+          )}
           
           <div className="flex gap-4">
             <button className="px-4 py-2.5 rounded-lg border border-white/10 hover:bg-white/5 transition-colors" onClick={() => {
