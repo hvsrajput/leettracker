@@ -43,7 +43,7 @@ export default function Profile() {
   if (!user) return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8 space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold text-white tracking-tight">Profile & Settings</h1>
         <p className="text-gray-400 mt-2">Manage your account and integrations</p>

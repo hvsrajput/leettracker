@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import Heatmap from '../components/Heatmap';
@@ -14,29 +14,36 @@ export default function Dashboard() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [patternHeatmap, setPatternHeatmap] = useState(null);
   const [companyProgress, setCompanyProgress] = useState(null);
+  const hasBootstrappedHeatmap = useRef(false);
 
   useEffect(() => {
-    Promise.all([
-      api.getCached('/dashboard', {}, 15000),
-      api.getCached('/dashboard/pattern-heatmap/me', {}, 15000),
-      api.getCached('/dashboard/company-progress/me', {}, 15000)
-    ])
-    .then(([dashRes, patternRes, companyRes]) => {
+    api.getCached('/dashboard', {}, 15000)
+    .then((dashRes) => {
       setStats(dashRes.data);
-      setPatternHeatmap(patternRes.data);
-      setCompanyProgress(companyRes.data);
+      setPatternHeatmap(dashRes.data.patternHeatmap || null);
+      setCompanyProgress(dashRes.data.companyProgress || null);
+      setHeatmapData(dashRes.data.heatmapData || {});
+      hasBootstrappedHeatmap.current = true;
     })
     .catch(console.error)
-    .finally(() => setLoading(false));
+    .finally(() => {
+      setLoading(false);
+      setHeatmapLoading(false);
+    });
   }, []);
 
   useEffect(() => {
+    if (heatmapGroup === 'me' && hasBootstrappedHeatmap.current) {
+      hasBootstrappedHeatmap.current = false;
+      return;
+    }
+
     setHeatmapLoading(true);
-    api.getCached(`/dashboard/heatmap?groupId=${heatmapGroup}&year=${selectedYear}`, {}, 30000)
+    api.getCached(`/dashboard/heatmap?groupId=${heatmapGroup}`, {}, 30000)
       .then(res => setHeatmapData(res.data))
       .catch(console.error)
       .finally(() => setHeatmapLoading(false));
-  }, [heatmapGroup, selectedYear]);
+  }, [heatmapGroup]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[50vh] text-gray-400">Loading dashboard...</div>;
@@ -51,7 +58,7 @@ export default function Dashboard() {
     : 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8 space-y-8 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold text-white tracking-tight">Dashboard</h1>
         <p className="text-gray-400 mt-2">Your coding progress at a glance</p>
@@ -105,15 +112,8 @@ export default function Dashboard() {
       </div>
 
       {/* Heatmap Section */}
-      <div className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 pr-[120px] shadow-lg shadow-black/30 min-h-[280px]">
-        {heatmapLoading ? (
-          <div className="flex items-center justify-center text-gray-400 h-full py-20">Loading activity...</div>
-        ) : (
-          <Heatmap data={heatmapData} year={selectedYear} />
-        )}
-        
-        {/* Year Selector */}
-        <div className="absolute right-6 top-6 w-[100px] flex flex-col gap-1.5">
+      <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-4 sm:p-6 shadow-lg shadow-black/30 min-h-[280px]">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           {Array.from({ length: 5 }).map((_, i) => {
             const year = new Date().getFullYear() - i;
             const isActive = selectedYear === year;
@@ -121,7 +121,7 @@ export default function Dashboard() {
               <button
                 key={year}
                 onClick={() => setSelectedYear(year)}
-                className={`text-xs font-medium transition-all duration-200 text-left px-3 py-1.5 rounded-lg border ${
+                className={`text-xs font-medium transition-all duration-200 px-3 py-1.5 rounded-lg border ${
                   isActive 
                     ? 'bg-blue-600/20 text-blue-400 border-blue-500/50 shadow-lg shadow-blue-500/10' 
                     : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5'
@@ -132,6 +132,12 @@ export default function Dashboard() {
             );
           })}
         </div>
+
+        {heatmapLoading ? (
+          <div className="flex items-center justify-center text-gray-400 h-full py-20">Loading activity...</div>
+        ) : (
+          <Heatmap data={heatmapData} year={selectedYear} />
+        )}
       </div>
 
       {/* Smart Pattern Insights */}

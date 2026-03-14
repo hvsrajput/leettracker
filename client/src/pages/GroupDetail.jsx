@@ -320,7 +320,7 @@ export default function GroupDetail() {
   if (!group) return null;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8 space-y-8 animate-fade-in">
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -569,46 +569,26 @@ export default function GroupDetail() {
           <p className="text-gray-400">{activePattern === 'all' ? 'Add problems to start tracking progress together!' : 'Try selecting a different pattern.'}</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-x-auto">
-          <div className="min-w-max">
-            {/* Table Header */}
-            <div className="flex p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
-              <span className="w-16 flex-shrink-0">#</span>
-              <span className="w-64 flex-shrink-0">Problem</span>
-              <span className="w-32 flex-shrink-0">Difficulty</span>
-              <span className="min-w-[360px] flex-1 pr-6">Topics</span>
-              <div className="flex flex-none justify-end gap-6 pl-6">
-                {group.members?.map(m => (
-                  <div className="w-24 flex-shrink-0 text-center" key={m.id} title={m.username}>
-                    <div className="truncate">{m.username.substring(0, 5)}</div>
-                    <div className="mt-1 flex justify-center gap-3 text-[10px] text-gray-500">
-                      <span className="w-6 text-center">A</span>
-                      <span className="w-6 text-center">S</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Table Body */}
-            <div className="divide-y divide-white/5">
-              {filteredProblems.map((p) => {
-                const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
-                const hasExpandedTopics = expandedTopics[p.id];
-                const visibleTopics = hasExpandedTopics ? (p.topics || []) : (p.topics || []).slice(0, 2);
-                const hiddenTopicsCount = Math.max((p.topics || []).length - visibleTopics.length, 0);
+        <>
+          <div className="md:hidden space-y-4">
+            {filteredProblems.map((p) => {
+              const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
+              const hasExpandedTopics = expandedTopics[p.id];
+              const visibleTopics = hasExpandedTopics ? (p.topics || []) : (p.topics || []).slice(0, 2);
+              const hiddenTopicsCount = Math.max((p.topics || []).length - visibleTopics.length, 0);
 
-                return (
-                <div 
-                  className={`flex p-4 items-center transition-all duration-200 hover:bg-white/5 ${myStatus === 'solved' ? 'bg-green-500/[0.02]' : myStatus === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`}
+              return (
+                <div
+                  className={`rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md p-4 space-y-4 ${myStatus === 'solved' ? 'bg-green-500/[0.03]' : myStatus === 'attempted' ? 'bg-yellow-500/[0.03]' : ''}`}
                   key={p.leetcode_number}
                 >
-                  <span className="w-16 flex-shrink-0 font-mono text-gray-500 text-sm">#{p.leetcode_number}</span>
-                  <span className="w-64 flex-shrink-0 truncate pr-4">
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-200 hover:text-indigo-400 transition-colors title-link">
-                      {p.title}
-                    </a>
-                  </span>
-                  <span className="w-32 flex-shrink-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs text-gray-500 mb-1">#{p.leetcode_number}</div>
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-100 hover:text-indigo-400 transition-colors block">
+                        {p.title}
+                      </a>
+                    </div>
                     <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide uppercase border inline-block ${
                       p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
                       p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
@@ -616,8 +596,9 @@ export default function GroupDetail() {
                     }`}>
                       {p.difficulty}
                     </span>
-                  </span>
-                  <div className="min-w-[360px] flex-1 flex flex-wrap items-center gap-2 pr-6">
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
                     {p.topics?.length ? (
                       <>
                         {visibleTopics.map(topic => (
@@ -651,20 +632,122 @@ export default function GroupDetail() {
                       <span className="text-xs text-gray-500">No topics</span>
                     )}
                   </div>
-                  <div className="flex flex-none justify-end gap-6 pl-6">
+
+                  <div className="space-y-3">
                     {p.member_statuses?.map(ms => (
-                      <div className="w-24 flex-shrink-0 flex justify-center gap-3" key={ms.user_id}>
-                        {renderStatusControl(p.id, ms, 'attempted', ms.user_id === user?.id)}
-                        {renderStatusControl(p.id, ms, 'solved', ms.user_id === user?.id)}
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5" key={ms.user_id}>
+                        <span className="text-sm font-medium text-gray-200 truncate">{ms.username}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-500 uppercase">A</span>
+                          {renderStatusControl(p.id, ms, 'attempted', ms.user_id === user?.id)}
+                          <span className="ml-2 text-[10px] text-gray-500 uppercase">S</span>
+                          {renderStatusControl(p.id, ms, 'solved', ms.user_id === user?.id)}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-                );
-              })}
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-x-auto">
+            <div className="min-w-max">
+              {/* Table Header */}
+              <div className="flex p-4 border-b border-white/10 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-white/5">
+                <span className="w-16 flex-shrink-0">#</span>
+                <span className="w-64 flex-shrink-0">Problem</span>
+                <span className="w-32 flex-shrink-0">Difficulty</span>
+                <span className="min-w-[360px] flex-1 pr-6">Topics</span>
+                <div className="flex flex-none justify-end gap-6 pl-6">
+                  {group.members?.map(m => (
+                    <div className="w-24 flex-shrink-0 text-center" key={m.id} title={m.username}>
+                      <div className="truncate">{m.username.substring(0, 5)}</div>
+                      <div className="mt-1 flex justify-center gap-3 text-[10px] text-gray-500">
+                        <span className="w-6 text-center">A</span>
+                        <span className="w-6 text-center">S</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Table Body */}
+              <div className="divide-y divide-white/5">
+                {filteredProblems.map((p) => {
+                  const myStatus = p.member_statuses?.find(ms => ms.user_id === user?.id)?.status || 'unsolved';
+                  const hasExpandedTopics = expandedTopics[p.id];
+                  const visibleTopics = hasExpandedTopics ? (p.topics || []) : (p.topics || []).slice(0, 2);
+                  const hiddenTopicsCount = Math.max((p.topics || []).length - visibleTopics.length, 0);
+
+                  return (
+                  <div 
+                    className={`flex p-4 items-center transition-all duration-200 hover:bg-white/5 ${myStatus === 'solved' ? 'bg-green-500/[0.02]' : myStatus === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`}
+                    key={p.leetcode_number}
+                  >
+                    <span className="w-16 flex-shrink-0 font-mono text-gray-500 text-sm">#{p.leetcode_number}</span>
+                    <span className="w-64 flex-shrink-0 truncate pr-4">
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-200 hover:text-indigo-400 transition-colors title-link">
+                        {p.title}
+                      </a>
+                    </span>
+                    <span className="w-32 flex-shrink-0">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wide uppercase border inline-block ${
+                        p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                        p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                        'bg-red-500/10 text-red-400 border-red-500/20'
+                      }`}>
+                        {p.difficulty}
+                      </span>
+                    </span>
+                    <div className="min-w-[360px] flex-1 flex flex-wrap items-center gap-2 pr-6">
+                      {p.topics?.length ? (
+                        <>
+                          {visibleTopics.map(topic => (
+                            <span
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                              key={topic}
+                            >
+                              {topic}
+                            </span>
+                          ))}
+                          {hiddenTopicsCount > 0 && (
+                            <button
+                              type="button"
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                              onClick={() => toggleExpandedTopics(p.id)}
+                            >
+                              +{hiddenTopicsCount} more
+                            </button>
+                          )}
+                          {hasExpandedTopics && p.topics.length > 2 && (
+                            <button
+                              type="button"
+                              className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                              onClick={() => toggleExpandedTopics(p.id)}
+                            >
+                              Show less
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-500">No topics</span>
+                      )}
+                    </div>
+                    <div className="flex flex-none justify-end gap-6 pl-6">
+                      {p.member_statuses?.map(ms => (
+                        <div className="w-24 flex-shrink-0 flex justify-center gap-3" key={ms.user_id}>
+                          {renderStatusControl(p.id, ms, 'attempted', ms.user_id === user?.id)}
+                          {renderStatusControl(p.id, ms, 'solved', ms.user_id === user?.id)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Add Member Modal */}

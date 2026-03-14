@@ -25,12 +25,18 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
     return () => ro.disconnect();
   }, []);
 
-  const { cellSizePx } = useMemo(() => {
-    const available = Math.max(0, containerWidth - YEAR_SELECTOR_WIDTH - H_PADDING);
-    const totalGaps = (WEEKS - 1) * GAP_PX;
+  const { cellSizePx, gapPx } = useMemo(() => {
+    const isCompactScreen = containerWidth > 0 && containerWidth < 640;
+    const yearSelectorWidth = isCompactScreen ? 0 : YEAR_SELECTOR_WIDTH;
+    const horizontalPadding = isCompactScreen ? 0 : H_PADDING;
+    const gapPx = isCompactScreen ? 1 : GAP_PX;
+    const minCell = isCompactScreen ? 4 : MIN_CELL;
+    const maxCell = isCompactScreen ? 10 : MAX_CELL;
+    const available = Math.max(0, containerWidth - yearSelectorWidth - horizontalPadding);
+    const totalGaps = (WEEKS - 1) * gapPx;
     const raw = Math.floor((available - totalGaps) / WEEKS);
-    const clamped = Math.max(MIN_CELL, Math.min(MAX_CELL, raw || MIN_CELL));
-    return { cellSizePx: clamped };
+    const clamped = Math.max(minCell, Math.min(maxCell, raw || minCell));
+    return { cellSizePx: clamped, gapPx };
   }, [containerWidth]);
 
   const dates = useMemo(() => {
@@ -117,13 +123,13 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
         </div>
       </div>
 
-      <div className="w-full flex justify-center overflow-hidden">
+      <div className="w-full overflow-x-auto pb-2">
         <div 
-          className="grid grid-flow-col"
+          className="grid grid-flow-col min-w-max mx-auto"
           style={{ 
             gridTemplateColumns: `repeat(${maxWeek}, ${cellSizePx}px)`,
             gridTemplateRows: `repeat(7, ${cellSizePx}px)`,
-            gap: `${GAP_PX}px`
+            gap: `${gapPx}px`
           }}
         >
           {Array.from({ length: maxWeek }).map((_, col) =>

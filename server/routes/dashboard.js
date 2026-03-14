@@ -64,7 +64,6 @@ module.exports = function () {
 
       const patternStats = Object.values(patternMap).sort((a, b) => a.name.localeCompare(b.name));
       const difficultyStats = Object.values(difficultyMap);
-
       // Group progress
       const userGroups = await queryItems(`USERGROUP#${req.userId}`, 'GROUP#');
       const groupStats = (await Promise.all(userGroups.map(async (ug) => {
@@ -110,6 +109,74 @@ module.exports = function () {
       }
       recentSolved.sort((a, b) => new Date(b.solved_at) - new Date(a.solved_at));
 
+      const heatmapData = {};
+      progressItems.forEach((progress) => {
+        if (progress.solved === 1 && progress.solvedAt) {
+          const dateStr = progress.solvedAt.split('T')[0];
+          heatmapData[dateStr] = (heatmapData[dateStr] || 0) + 1;
+        }
+      });
+
+      const solvedPatternMap = {};
+      trackedProblems.forEach((problem) => {
+        if (problem.patternName) {
+          if (!solvedPatternMap[problem.patternName]) {
+            solvedPatternMap[problem.patternName] = { pattern: problem.patternName, total: 0, solved: 0 };
+          }
+          solvedPatternMap[problem.patternName].total++;
+          if (progressMap[String(problem.leetcodeNumber)]?.solved === 1) {
+            solvedPatternMap[problem.patternName].solved++;
+          }
+        }
+      });
+
+      const allPatterns = Object.values(solvedPatternMap).map((pattern) => ({
+        pattern: pattern.pattern,
+        percent: pattern.total > 0 ? Math.round((pattern.solved / pattern.total) * 100) : 0,
+        solved: pattern.solved,
+        total: pattern.total,
+      })).sort((a, b) => b.percent - a.percent);
+
+      let strongest = null;
+      let weakest = null;
+      let neglected = null;
+
+      if (allPatterns.length > 0) {
+        strongest = allPatterns[0];
+        const attemptedPatterns = allPatterns.filter((pattern) => pattern.percent > 0);
+        weakest = attemptedPatterns.length > 0
+          ? attemptedPatterns[attemptedPatterns.length - 1]
+          : allPatterns[allPatterns.length - 1];
+
+        const unattemptedPatterns = allPatterns
+          .filter((pattern) => pattern.percent === 0)
+          .sort((a, b) => b.total - a.total);
+        if (unattemptedPatterns.length > 0) {
+          neglected = unattemptedPatterns[0];
+        }
+      }
+
+      const problemsDataset = getProblemsDataset();
+      const companyMap = {};
+      problemsDataset.forEach((problem) => {
+        (problem.companies || []).forEach((company) => {
+          if (!companyMap[company]) {
+            companyMap[company] = { company, solved: 0, total: 0 };
+          }
+          companyMap[company].total++;
+          if (progressMap[String(problem.number)]?.solved === 1) {
+            companyMap[company].solved++;
+          }
+        });
+      });
+
+      const companyProgress = Object.values(companyMap)
+        .map((company) => ({
+          ...company,
+          percent: company.total > 0 ? Math.round((company.solved / company.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.percent - a.percent || b.total - a.total);
+
       res.json({
         totalSolved,
         totalAttempted,
@@ -118,6 +185,9 @@ module.exports = function () {
         difficultyStats,
         groupStats,
         recentSolved: recentSolved.slice(0, 10),
+        heatmapData,
+        patternHeatmap: { strongest, weakest, neglected, allPatterns },
+        companyProgress,
       });
     } catch (err) {
       console.error('Dashboard error:', err);
@@ -146,19 +216,20 @@ module.exports = function () {
         }
       }
 
+      const memberProgressItems = await Promise.all(
+        userIdsToFetch.map((uid) => queryItems(`PROGRESS#${uid}`, 'PROB#'))
+      );
+
       // Aggregate all solves per date (YYYY-MM-DD)
       const heatmapData = {};
 
-      for (const uid of userIdsToFetch) {
-        const progressItems = await queryItems(`PROGRESS#${uid}`, 'PROB#');
-        for (const p of progressItems) {
+      memberProgressItems.flat().forEach((p) => {
           if (p.solved === 1 && p.solvedAt) {
             // Extract just the date part (YYYY-MM-DD)
             const dateStr = p.solvedAt.split('T')[0];
             heatmapData[dateStr] = (heatmapData[dateStr] || 0) + 1;
           }
-        }
-      }
+      });
 
       res.json(heatmapData);
     } catch (err) {
@@ -175,7 +246,7 @@ module.exports = function () {
       const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
       const progressMap = {};
       progressItems.forEach(p => {
-        if (p.solved === 1) progressMap[p.SK.replace('PROB#', '')] = true;
+        progressMap[p.SK.replace('PROB#', '')] = p.solved === 1;
       });
 
       const patternMap = {};
@@ -192,7 +263,7 @@ module.exports = function () {
             patternMap[p.patternName] = { pattern: p.patternName, total: 0, solved: 0 };
           }
           patternMap[p.patternName].total++;
-          if (progressMap[String(p.leetcodeNumber)]) {
+          if (progressMap[String(p.leetcodeNumber)] === true) {
             patternMap[p.patternName].solved++;
           }
         }
