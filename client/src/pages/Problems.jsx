@@ -5,6 +5,7 @@ import { COMPANY_OPTIONS, getProblemTopics } from '../utils/problemFilters';
 
 export default function Problems() {
   const [allProblems, setAllProblems] = useState([]);
+  const [expandedTopics, setExpandedTopics] = useState({});
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activePattern, setActivePattern] = useState('all');
@@ -129,6 +130,13 @@ export default function Problems() {
         console.error('Failed to delete problem', err);
       }
     }
+  };
+
+  const toggleExpandedTopics = (problemId) => {
+    setExpandedTopics(prev => ({
+      ...prev,
+      [problemId]: !prev[problemId],
+    }));
   };
 
   return (
@@ -334,87 +342,115 @@ export default function Problems() {
       ) : (
         <>
           <div className="md:hidden space-y-4">
-            {problems.map((p) => (
-              <div
-                className={`rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md p-4 space-y-4 ${p.status === 'solved' ? 'bg-green-500/[0.03]' : p.status === 'attempted' ? 'bg-yellow-500/[0.03]' : ''}`}
-                key={p.id}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-mono text-xs text-gray-500 mb-1">#{p.leetcode_number}</div>
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-100 hover:text-indigo-400 transition-colors block">
-                      {p.title}
-                    </a>
+            {problems.map((p) => {
+              const topics = p.topics?.length ? p.topics : (p.pattern_name ? [p.pattern_name] : []);
+              const hasExpandedTopics = expandedTopics[p.id];
+              const visibleTopics = hasExpandedTopics ? topics : topics.slice(0, 2);
+              const hiddenTopicsCount = Math.max(topics.length - visibleTopics.length, 0);
+
+              return (
+                <div
+                  className={`rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md p-4 space-y-4 ${p.status === 'solved' ? 'bg-green-500/[0.03]' : p.status === 'attempted' ? 'bg-yellow-500/[0.03]' : ''}`}
+                  key={p.id}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs text-gray-500 mb-1">#{p.leetcode_number}</div>
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-100 hover:text-indigo-400 transition-colors block">
+                        {p.title}
+                      </a>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }}
+                      className="p-2 text-gray-600 hover:text-red-500 transition-colors hover:bg-red-500/10 rounded-md"
+                      title="Delete problem"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                      </svg>
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }}
-                    className="p-2 text-gray-600 hover:text-red-500 transition-colors hover:bg-red-500/10 rounded-md"
-                    title="Delete problem"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                    </svg>
-                  </button>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
-                    p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
-                    p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                    'bg-red-500/10 text-red-400 border-red-500/20'
-                  }`}>
-                    {p.difficulty}
-                  </span>
-                  {p.pattern_name && (
-                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      {p.pattern_name}
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
+                      p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                      p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                      'bg-red-500/10 text-red-400 border-red-500/20'
+                    }`}>
+                      {p.difficulty}
                     </span>
-                  )}
-                  {p.companies?.[0] && (
-                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
-                      {p.companies[0]}
-                    </span>
-                  )}
-                </div>
+                    {visibleTopics.map(topic => (
+                      <span
+                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                        key={topic}
+                      >
+                        {topic}
+                      </span>
+                    ))}
+                    {hiddenTopicsCount > 0 && (
+                      <button
+                        type="button"
+                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                        onClick={() => toggleExpandedTopics(p.id)}
+                      >
+                        +{hiddenTopicsCount} more
+                      </button>
+                    )}
+                    {hasExpandedTopics && topics.length > 2 && (
+                      <button
+                        type="button"
+                        className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                        onClick={() => toggleExpandedTopics(p.id)}
+                      >
+                        Show less
+                      </button>
+                    )}
+                    {p.companies?.[0] && (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                        {p.companies[0]}
+                      </span>
+                    )}
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
-                      p.status === 'attempted'
-                        ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300'
-                        : 'bg-white/5 border-white/10 text-gray-300'
-                    }`}
-                    onClick={() => handleSetStatus(p.id, p.status === 'attempted' ? 'unsolved' : 'attempted')}
-                  >
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center ${p.status === 'attempted' ? 'border-yellow-400' : 'border-white/20'}`}>
-                      {p.status === 'attempted' && (
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </span>
-                    Attempted
-                  </button>
-                  <button
-                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
-                      p.status === 'solved'
-                        ? 'bg-green-500 border-green-500 text-black'
-                        : 'bg-white/5 border-white/10 text-gray-300'
-                    }`}
-                    onClick={() => handleSetStatus(p.id, p.status === 'solved' ? 'unsolved' : 'solved')}
-                  >
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center ${p.status === 'solved' ? 'border-black/20' : 'border-white/20'}`}>
-                      {p.status === 'solved' && (
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </span>
-                    Solved
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                        p.status === 'attempted'
+                          ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300'
+                          : 'bg-white/5 border-white/10 text-gray-300'
+                      }`}
+                      onClick={() => handleSetStatus(p.id, p.status === 'attempted' ? 'unsolved' : 'attempted')}
+                    >
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center ${p.status === 'attempted' ? 'border-yellow-400' : 'border-white/20'}`}>
+                        {p.status === 'attempted' && (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </span>
+                      Attempted
+                    </button>
+                    <button
+                      className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                        p.status === 'solved'
+                          ? 'bg-green-500 border-green-500 text-black'
+                          : 'bg-white/5 border-white/10 text-gray-300'
+                      }`}
+                      onClick={() => handleSetStatus(p.id, p.status === 'solved' ? 'unsolved' : 'solved')}
+                    >
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center ${p.status === 'solved' ? 'border-black/20' : 'border-white/20'}`}>
+                        {p.status === 'solved' && (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </span>
+                      Solved
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="hidden md:block rounded-2xl border border-white/10 bg-black/20 backdrop-blur-md overflow-hidden">
@@ -428,83 +464,111 @@ export default function Problems() {
               <span className="text-center uppercase tracking-wider">Del</span>
             </div>
             <div className="divide-y divide-white/5">
-              {problems.map((p) => (
-                <div 
-                  className={`grid grid-cols-[128px_128px_60px_minmax(220px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
-                  key={p.id}
-                >
-                  <div className="flex justify-center flex-shrink-0">
-                    <button 
-                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
-                        p.status === 'attempted' ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300' : 
-                        'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
-                      }`}
-                      onClick={() => handleSetStatus(p.id, p.status === 'attempted' ? 'unsolved' : 'attempted')}
-                      title={p.status === 'attempted' ? 'Mark unattempted' : 'Mark attempted'}
-                    >
-                      {p.status === 'attempted' && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                  <div className="flex justify-center flex-shrink-0">
-                    <button 
-                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
-                        p.status === 'solved' ? 'bg-green-500 border border-green-500 text-black' : 
-                        'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
-                      }`}
-                      onClick={() => handleSetStatus(p.id, p.status === 'solved' ? 'unsolved' : 'solved')}
-                      title={p.status === 'solved' ? 'Mark unsolved' : 'Mark solved'}
-                    >
-                      {p.status === 'solved' && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                  <span className="font-mono text-gray-500">#{p.leetcode_number}</span>
-                  <span className="truncate">
-                    <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-200 hover:text-indigo-400 transition-colors">
-                      {p.title}
-                    </a>
-                  </span>
-                  <span>
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
-                      p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
-                      p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                      'bg-red-500/10 text-red-400 border-red-500/20'
-                    }`}>
-                      {p.difficulty}
+              {problems.map((p) => {
+                const topics = p.topics?.length ? p.topics : (p.pattern_name ? [p.pattern_name] : []);
+                const hasExpandedTopics = expandedTopics[p.id];
+                const visibleTopics = hasExpandedTopics ? topics : topics.slice(0, 2);
+                const hiddenTopicsCount = Math.max(topics.length - visibleTopics.length, 0);
+
+                return (
+                  <div 
+                    className={`grid grid-cols-[128px_128px_60px_minmax(220px,1fr)_100px_minmax(150px,1fr)_48px] gap-4 p-4 items-center transition-all duration-200 hover:bg-white/5 ${p.status === 'solved' ? 'bg-green-500/[0.02]' : p.status === 'attempted' ? 'bg-yellow-500/[0.02]' : ''}`} 
+                    key={p.id}
+                  >
+                    <div className="flex justify-center flex-shrink-0">
+                      <button 
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                          p.status === 'attempted' ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300' : 
+                          'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
+                        }`}
+                        onClick={() => handleSetStatus(p.id, p.status === 'attempted' ? 'unsolved' : 'attempted')}
+                        title={p.status === 'attempted' ? 'Mark unattempted' : 'Mark attempted'}
+                      >
+                        {p.status === 'attempted' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <div className="flex justify-center flex-shrink-0">
+                      <button 
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                          p.status === 'solved' ? 'bg-green-500 border border-green-500 text-black' : 
+                          'bg-white/5 border border-white/20 text-transparent hover:border-white/40'
+                        }`}
+                        onClick={() => handleSetStatus(p.id, p.status === 'solved' ? 'unsolved' : 'solved')}
+                        title={p.status === 'solved' ? 'Mark unsolved' : 'Mark solved'}
+                      >
+                        {p.status === 'solved' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    <span className="font-mono text-gray-500">#{p.leetcode_number}</span>
+                    <span className="truncate">
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" className="font-medium text-gray-200 hover:text-indigo-400 transition-colors">
+                        {p.title}
+                      </a>
                     </span>
-                  </span>
-                  <div className="flex flex-wrap gap-2 pr-2">
-                    {p.pattern_name && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20 truncate max-w-full">
-                        {p.pattern_name}
+                    <span>
+                      <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
+                        p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                        p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                        'bg-red-500/10 text-red-400 border-red-500/20'
+                      }`}>
+                        {p.difficulty}
                       </span>
-                    )}
-                    {p.companies && p.companies.length > 0 && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20 truncate max-w-full hidden sm:inline-block">
-                        {p.companies[0]}
-                      </span>
-                    )}
+                    </span>
+                    <div className="flex flex-wrap gap-2 pr-2">
+                      {visibleTopics.map(topic => (
+                        <span
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                          key={topic}
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                      {hiddenTopicsCount > 0 && (
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                          onClick={() => toggleExpandedTopics(p.id)}
+                        >
+                          +{hiddenTopicsCount} more
+                        </button>
+                      )}
+                      {hasExpandedTopics && topics.length > 2 && (
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 rounded text-[11px] font-medium bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 transition-colors"
+                          onClick={() => toggleExpandedTopics(p.id)}
+                        >
+                          Show less
+                        </button>
+                      )}
+                      {p.companies && p.companies.length > 0 && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20 truncate max-w-full hidden sm:inline-block">
+                          {p.companies[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-center">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }} 
+                        className="p-1.5 text-gray-600 hover:text-red-500 transition-colors hover:bg-red-500/10 rounded-md" 
+                        title="Delete problem"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex justify-center">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(p.id, p.title); }} 
-                      className="p-1.5 text-gray-600 hover:text-red-500 transition-colors hover:bg-red-500/10 rounded-md" 
-                      title="Delete problem"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
