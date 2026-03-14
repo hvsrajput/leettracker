@@ -226,7 +226,9 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
   };
 
   const handleInstantSync = async (usernameToUse = tempUsername) => {
-    if (!usernameToUse.trim()) {
+    const normalizedUsername = usernameToUse.trim();
+
+    if (!normalizedUsername) {
       setError('Please enter your LeetCode username');
       return;
     }
@@ -236,9 +238,9 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
     try {
       // 1. If username is new, save it to profile first
-      if (usernameToUse !== user?.leetcodeUsername) {
-        await api.put('/auth/profile', { leetcodeUsername: usernameToUse });
-        updateUser({ ...user, leetcodeUsername: usernameToUse });
+      if (normalizedUsername !== user?.leetcodeUsername) {
+        await api.put('/auth/me/leetcode-username', { leetcodeUsername: normalizedUsername });
+        updateUser({ ...user, leetcodeUsername: normalizedUsername });
       }
 
       // 2. Trigger sync

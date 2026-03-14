@@ -110,6 +110,73 @@ async function updateProgress(userId, num, newStatus, timestamp) {
   return newStatus === 'solved' ? 'solved' : 'attempted';
 }
 
+async function fetchAcceptedProblemData(username) {
+  const profileQuery = `
+    query userProfileUserQuestionProgressV2($userSlug: String!) {
+      userProfileUserQuestionProgressV2(userSlug: $userSlug) {
+        acceptedQuestionList { titleSlug }
+      }
+    }
+  `;
+
+  const response = await axios.post('https://leetcode.com/graphql', {
+    query: profileQuery,
+    variables: { userSlug: username }
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Referer': 'https://leetcode.com',
+      'Origin': 'https://leetcode.com',
+      'User-Agent': 'Mozilla/5.0',
+    },
+    timeout: 10000
+  });
+
+  if (response.data?.errors?.length) {
+    throw new Error(response.data.errors[0].message || 'LeetCode profile lookup failed');
+  }
+
+  const progressData = response.data?.data?.userProfileUserQuestionProgressV2;
+  if (!progressData) {
+    const error = new Error('Could not find a public LeetCode profile for that username');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return progressData.acceptedQuestionList || [];
+}
+
+async function fetchRecentAcceptedSubmissionDates(username) {
+  const subQuery = `
+    query recentSubmissionList($username: String!, $limit: Int!) {
+      recentSubmissionList(username: $username, limit: $limit) {
+        titleSlug
+        statusDisplay
+        timestamp
+      }
+    }
+  `;
+
+  const response = await axios.post('https://leetcode.com/graphql', {
+    query: subQuery,
+    variables: { username, limit: 20 }
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Referer': 'https://leetcode.com',
+      'Origin': 'https://leetcode.com',
+      'User-Agent': 'Mozilla/5.0',
+    },
+    timeout: 5000
+  });
+
+  if (response.data?.errors?.length) {
+    throw new Error(response.data.errors[0].message || 'Failed to fetch recent submissions');
+  }
+
+  return response.data?.data?.recentSubmissionList || [];
+}
+
 module.exports = function () {
   router.post('/import', auth, async (req, res) => {
     const { solvedMap } = req.body;
@@ -165,67 +232,27 @@ module.exports = function () {
       const user = await getItem(`USER#${req.userId}`, 'PROFILE');
       if (!user) return res.status(404).json({ error: 'User not found' });
       
-      const username = user.leetcodeUsername;
+      const username = user.leetcodeUsername?.trim();
       if (!username) {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      // We use a dual approach: 
-      // 1. Get ALL solved slugs (to ensure we don't miss anything)
-      // 2. Get recent submission timestamps (to populate the heatmap)
-      const profileQuery = `
-        query userProfileUserQuestionProgressV2($userSlug: String!) {
-          userProfileUserQuestionProgressV2(userSlug: $userSlug) {
-            acceptedQuestionList { titleSlug }
-          }
-        }
-      `;
-
-      const subQuery = `
-        query recentSubmissionList($username: String!, $limit: Int!) {
-          recentSubmissionList(username: $username, limit: $limit) {
-            titleSlug
-            statusDisplay
-            timestamp
-          }
-        }
-      `;
-
       const solvedSlugs = new Set();
       const dateMap = new Map();
-      
+
+      const accepted = await fetchAcceptedProblemData(username);
+      accepted.forEach((problem) => solvedSlugs.add(problem.titleSlug));
+
       try {
-        // Step 1: Get all AC slugs
-        const profileResp = await axios.post('https://leetcode.com/graphql', {
-          query: profileQuery,
-          variables: { userSlug: username }
-        }, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000
+        const recentSubmissions = await fetchRecentAcceptedSubmissionDates(username);
+        recentSubmissions.forEach((submission) => {
+          if (submission.statusDisplay === 'Accepted' && !dateMap.has(submission.titleSlug)) {
+            dateMap.set(submission.titleSlug, new Date(parseInt(submission.timestamp, 10) * 1000).toISOString());
+          }
         });
-        
-        const accepted = profileResp.data?.data?.userProfileUserQuestionProgressV2?.acceptedQuestionList || [];
-        accepted.forEach(q => solvedSlugs.add(q.titleSlug));
-
-        // Step 2: Get recent submission dates
-        const subResp = await axios.post('https://leetcode.com/graphql', {
-          query: subQuery,
-          variables: { username, limit: 20 }
-        }, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 5000
-        });
-
-        const list = subResp.data?.data?.recentSubmissionList;
-        if (list) {
-          list.forEach(sub => {
-            if (sub.statusDisplay === 'Accepted' && !dateMap.has(sub.titleSlug)) {
-              dateMap.set(sub.titleSlug, new Date(parseInt(sub.timestamp) * 1000).toISOString());
-            }
-          });
-        }
       } catch (err) {
-        console.error('GraphQL Sync Error:', err.message);
+        // Exact timestamps are optional for instant sync, so keep going if this secondary query fails.
+        console.error('Recent submission sync warning:', err.message);
       }
 
       const defaultTimestamp = new Date().toISOString();
@@ -252,7 +279,11 @@ module.exports = function () {
       });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);
-      res.status(500).json({ error: 'Failed to sync from LeetCode' });
+      const statusCode = error.statusCode || 500;
+      const errorMessage = statusCode === 404
+        ? 'Could not find a public LeetCode profile for that username. Check the username and profile privacy.'
+        : 'Failed to sync from LeetCode';
+      res.status(statusCode).json({ error: errorMessage });
     }
   });
 

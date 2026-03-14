@@ -15,15 +15,24 @@ export default function Profile() {
     }
   }, [user]);
 
+  const saveLeetCodeUsername = async (nextUsername) => {
+    const normalizedUsername = nextUsername.trim();
+    const res = await api.put('/auth/me/leetcode-username', { leetcodeUsername: normalizedUsername });
+
+    if (updateUser) {
+      updateUser({ ...user, leetcodeUsername: res.data.leetcodeUsername });
+    }
+
+    setLeetcodeUsername(normalizedUsername);
+    return normalizedUsername;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
     try {
-      const res = await api.put('/auth/me/leetcode-username', { leetcodeUsername });
-      if (updateUser) {
-         updateUser({ ...user, leetcodeUsername: res.data.leetcodeUsername });
-      }
+      await saveLeetCodeUsername(leetcodeUsername);
       setMessage({ type: 'success', text: 'Settings saved successfully' });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save settings' });
@@ -36,6 +45,17 @@ export default function Profile() {
     setSyncing(true);
     setMessage(null);
     try {
+      const normalizedUsername = leetcodeUsername.trim() || user?.leetcodeUsername || '';
+
+      if (!normalizedUsername) {
+        setMessage({ type: 'error', text: 'Please add your LeetCode username before syncing.' });
+        return;
+      }
+
+      if (normalizedUsername !== user?.leetcodeUsername) {
+        await saveLeetCodeUsername(normalizedUsername);
+      }
+
       const res = await api.post('/leetcode/sync');
       const { newlyImported, alreadyTracked } = res.data;
       let msg = `Sync successful! Found ${newlyImported + alreadyTracked} solved problems.`;
