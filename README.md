@@ -1,191 +1,339 @@
-# ⚡ LeetTracker
+# LeetTracker
 
-A multi-user LeetCode problem tracker where users can organize and track coding problems by patterns, collaborate in groups, and visualize their progress.
+LeetTracker is a full-stack LeetCode tracking app for personal practice and group collaboration. It lets users track problems with `unsolved`, `attempted`, and `solved` states, organize work by topics and companies, sync solved problems from LeetCode, and view progress through dashboards and shared group views.
 
-![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=node.js&logoColor=white)
-![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=white)
-![AWS Lambda](https://img.shields.io/badge/AWS-Lambda-FF9900?logo=aws&logoColor=white)
-![DynamoDB](https://img.shields.io/badge/Amazon-DynamoDB-4053D6?logo=amazon-dynamodb&logoColor=white)
+## What The App Does
 
----
+- Personal problem tracking with `unsolved`, `attempted`, and `solved` states
+- Dynamic topic filters generated from the actual tracked problem set
+- Difficulty, company, and status filters
+- Group problem sets with per-member progress columns
+- Add-to-group from your own problem set, including multi-select flows
+- Dashboard with activity heatmap, pattern insights, company progress, group stats, and recent activity
+- LeetCode import and sync using a saved public LeetCode username
+- Mobile-friendly and desktop-friendly React SPA
+- Manual and scheduled DynamoDB backups to S3
 
-## ✨ Features
+## Current Architecture
 
-- **🔐 Authentication** — Register / login with JWT-based sessions
-- **📝 Problem Tracking** — Add problems by LeetCode number; title, difficulty, pattern, and URL are auto-fetched from a built-in 150+ problem dataset
-- **🏷️ Pattern Tabs** — 16 default patterns (Arrays, DP, Graphs, Trees, etc.) + create your own custom patterns
-- **✅ Checkmark Progress** — One-click solved/unsolved toggle per problem
-- **🔍 Filters** — Filter by solved/unsolved, difficulty (Easy/Medium/Hard), and pattern
-- **👥 Groups** — Create study groups, add members by username, and track per-member solve status on shared problem lists
-- **📊 Dashboard** — SVG progress ring, difficulty breakdown, pattern-wise progress bars, group stats, and recent activity
-- **🔗 LeetCode Links** — Click any problem title to open it on LeetCode in a new tab
-- **🌙 Dark Theme** — Modern dark UI with glassmorphism cards, gradient accents, and smooth animations
+- Frontend: React single-page app deployed to Vercel
+- Backend API: Express app wrapped for AWS Lambda with `serverless-http`
+- API entrypoint: AWS API Gateway -> Lambda -> Express routes
+- Primary data store: Amazon DynamoDB using a single-table design
+- Backup worker: separate scheduled Lambda that exports data to Amazon S3
+- LeetCode integration: backend requests LeetCode's public GraphQL endpoints
+- Problem metadata source: local JSON dataset plus live LeetCode fallback for sync/import edge cases
 
----
+## Complete Tech Stack
 
-## 🛠️ Tech Stack
+This section reflects the code that is currently in the repository.
 
-| Layer    | Technology                  |
-|----------|-----------------------------|
-| Frontend | React 19, Vite 7, Axios    |
-| Backend  | Node.js, Express on AWS Lambda |
-| Database | Amazon DynamoDB (Single Table) |
-| Auth     | JWT (jsonwebtoken, bcryptjs)|
-| Styling  | Vanilla CSS, Inter font     |
+| Category | Technologies in use | Notes |
+| --- | --- | --- |
+| Languages | JavaScript, JSON, CSS, Bash | JavaScript is used on both client and server |
+| Frontend framework | React 19, React DOM 19 | SPA UI |
+| Frontend routing | React Router DOM 7 | Page routing and protected routes |
+| Frontend build tool | Vite 5, `@vitejs/plugin-react` | Dev server and production build |
+| Frontend HTTP client | Axios | API requests from the browser |
+| Frontend styling | Tailwind CSS 3, PostCSS, Autoprefixer, custom CSS | Tailwind utility styling plus custom styles |
+| Fonts | Google Fonts: Inter, JetBrains Mono | Loaded in [`client/index.html`](client/index.html) |
+| Frontend quality tooling | ESLint 9, `@eslint/js`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `globals` | Linting setup |
+| Backend runtime | Node.js, Express 4 | API server logic |
+| Backend serverless adapter | `serverless-http` | Wraps Express for Lambda |
+| Backend HTTP client | Axios | Used for LeetCode GraphQL calls |
+| Authentication | JSON Web Tokens (`jsonwebtoken`), `bcryptjs` | JWT auth and password hashing |
+| Backend middleware/utilities | `cors`, `dotenv`, `uuid` | CORS, env loading, short group IDs |
+| Database | Amazon DynamoDB | Single-table model |
+| DynamoDB client layer | AWS SDK v3: `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb` | Uses `DynamoDBDocumentClient` helpers |
+| Object storage | Amazon S3, AWS SDK v3 `@aws-sdk/client-s3` | Stores JSON backups |
+| Compute | AWS Lambda | One API Lambda and one backup Lambda |
+| Scheduling | Amazon EventBridge | Triggers scheduled backups |
+| API ingress | Amazon API Gateway | Frontend points to the `/api` base URL |
+| Hosting | Vercel, AWS | Vercel for client, AWS for backend services |
+| External integration | LeetCode GraphQL | Import/sync and metadata fallback |
+| Local dataset | [`server/data/problems.json`](server/data/problems.json) | Bundled dataset with 3,865 problems |
+| Packaging/deployment tooling | `zip`, Bash, AWS CLI, Vercel rewrites | `server/package.json`, [`deploy.sh`](deploy.sh), [`client/vercel.json`](client/vercel.json) |
 
----
+## What Is Not In This Repo
 
-## 🚀 Getting Started
+- No TypeScript
+- No Next.js
+- No Docker setup
+- No Prisma or other ORM
+- No relational database
+- No server-rendered frontend
 
-### Prerequisites
+## Repository Structure
 
-- [Node.js](https://nodejs.org/) v18+
-- npm
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/hvsrajput/leettracker.git
-cd leettracker
+```text
+leettracker/
+├── client/
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── vercel.json
+│   ├── index.html
+│   └── src/
+│       ├── App.jsx
+│       ├── main.jsx
+│       ├── index.css
+│       ├── api/
+│       │   └── index.js
+│       ├── context/
+│       │   └── AuthContext.jsx
+│       ├── components/
+│       │   ├── Heatmap.jsx
+│       │   ├── LeetCodeImport.jsx
+│       │   ├── Navbar.jsx
+│       │   ├── ProtectedRoute.jsx
+│       │   └── groups/
+│       │       ├── AddFromProblemsetModal.jsx
+│       │       └── ProblemRow.jsx
+│       ├── pages/
+│       │   ├── Dashboard.jsx
+│       │   ├── GroupDetail.jsx
+│       │   ├── Groups.jsx
+│       │   ├── Login.jsx
+│       │   ├── Problems.jsx
+│       │   ├── Profile.jsx
+│       │   └── Register.jsx
+│       └── utils/
+│           └── problemFilters.js
+├── server/
+│   ├── index.js
+│   ├── lambda.js
+│   ├── lambda-backup.js
+│   ├── backup.js
+│   ├── package.json
+│   ├── middleware/
+│   │   └── auth.js
+│   ├── db/
+│   │   ├── dynamodb.js
+│   │   ├── seed-dynamodb.js
+│   │   └── wipe-dynamodb.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   ├── dashboard.js
+│   │   ├── groups.js
+│   │   ├── leetcode.js
+│   │   ├── patterns.js
+│   │   └── problems.js
+│   ├── utils/
+│   │   └── problemsDataset.js
+│   └── data/
+│       └── problems.json
+├── deploy.sh
+├── package.json
+└── README.md
 ```
 
-### 2. Set up the backend
+## Environment Variables
 
-```bash
-cd server
-npm install
-```
+### Server
 
-Create a `.env` file (see `.env.example`):
+Create `server/.env`:
 
 ```env
-JWT_SECRET=your-secret-key-here
-PORT=5000
+JWT_SECRET=your-jwt-secret-here
 AWS_REGION=ap-south-1
 DYNAMODB_TABLE=LeetTrackerTable
 S3_BACKUP_BUCKET=leettracker-backups
+
+# Optional when not using an IAM role or configured AWS profile
+# AWS_ACCESS_KEY_ID=your-access-key
+# AWS_SECRET_ACCESS_KEY=your-secret-key
 ```
 
-*(Note: If running locally without an IAM role, also add `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).*
+Notes:
 
-Seed the DynamoDB table with default patterns:
+- `PORT` is optional for local Express usage and defaults to `5000`
+- In AWS Lambda, the API uses the deployed environment instead of a local port
 
-```bash
-npm run seed
-```
+### Client
 
-Start the local Express server:
-
-```bash
-npm start
-```
-
-### 3. Set up the frontend
-
-```bash
-cd client
-npm install
-```
-
-Create a `.env` file pointing to your local server (or AWS API Gateway URL):
+Create `client/.env`:
 
 ```env
 VITE_API_URL=http://localhost:5000/api
 ```
 
-Start the dev server:
+Example production value:
+
+```env
+VITE_API_URL=https://your-api-gateway-id.execute-api.ap-south-1.amazonaws.com/api
+```
+
+## Local Development
+
+### 1. Clone and install
 
 ```bash
-npm run dev
+git clone <your-repo-url>
+cd leettracker
+npm run install-all
 ```
 
-### 4. Deploying to Production
+### 2. Seed default patterns
 
-The app is built for **zero-cost serverless** deployment:
-- **Frontend**: Deploy to Vercel (free tier)
-- **Backend API**: Package with `npm run package` and deploy to AWS Lambda
-- **Database**: AWS DynamoDB (on-demand capacity)
-- **Automated Backup**: AWS EventBridge scheduling Lambda to upload JSON to S3
-
-Check out [`DEPLOY.md`](./DEPLOY.md) for full deployment instructions, or simply run `./deploy.sh` to automatically push changes to AWS and Vercel.
-
----
-
-## 📁 Project Structure
-
-```
-leettracker/
-├── server/
-│   ├── index.js                # Express local entry & app logic
-│   ├── lambda.js               # AWS Lambda handler (API endpoint)
-│   ├── lambda-backup.js        # AWS Lambda handler (Scheduled EventBridge backup)
-│   ├── backup.js               # S3 Backup logic
-│   ├── middleware/auth.js       # JWT verification
-│   ├── routes/
-│   │   ├── auth.js             # Register, login, me
-│   │   ├── patterns.js         # List & add patterns
-│   │   ├── problems.js         # CRUD, lookup, toggle
-│   │   ├── groups.js           # Groups, members, status
-│   │   └── dashboard.js        # Aggregated stats
-│   ├── data/problems.json      # 150+ curated LC problems
-│   ├── db/
-│   │   ├── dynamodb.js         # DynamoDB client & helpers
-│   │   └── seed-dynamodb.js    # Seed script for patterns
-│   ├── .env.example
-│   └── package.json
-├── client/
-│   ├── vercel.json             # Vercel SPA routing rules
-│   └── src/
-│       ├── api/index.js        # Axios + JWT interceptor
-│       ├── context/AuthContext.jsx
-│       ├── components/
-│       │   ├── Navbar.jsx
-│       │   └── ProtectedRoute.jsx
-│       ├── pages/
-│       │   ├── Login.jsx
-│       │   ├── Register.jsx
-│       │   ├── Dashboard.jsx
-│       │   ├── Problems.jsx
-│       │   ├── Groups.jsx
-│       │   └── GroupDetail.jsx
-│       └── index.css           # Design system
-├── DEPLOY.md                   # Full AWS + Vercel deployment guide
-├── deploy.sh                   # Automated deployment shell script
-├── .gitignore
-└── README.md
+```bash
+npm run seed
 ```
 
----
+This runs the DynamoDB seed script from the server package.
 
-## 📡 API Endpoints
+### 3. Start the backend
 
-| Method | Endpoint                      | Description                         |
-|--------|-------------------------------|-------------------------------------|
-| POST   | `/api/auth/register`          | Create account                      |
-| POST   | `/api/auth/login`             | Login, returns JWT                  |
-| GET    | `/api/auth/me`                | Current user info                   |
-| GET    | `/api/patterns`               | List all patterns                   |
-| POST   | `/api/patterns`               | Add custom pattern                  |
-| GET    | `/api/problems`               | Filtered problem list               |
-| POST   | `/api/problems`               | Add problem by LC number            |
-| GET    | `/api/problems/lookup/:num`   | Preview problem from dataset        |
-| POST   | `/api/problems/:id/toggle`    | Toggle solved status                |
-| GET    | `/api/groups`                 | List user's groups                  |
-| POST   | `/api/groups`                 | Create group                        |
-| GET    | `/api/groups/:id`             | Group detail + member statuses      |
-| POST   | `/api/groups/:id/members`     | Add member by username              |
-| POST   | `/api/groups/:id/problems`    | Add problem to group                |
-| GET    | `/api/dashboard`              | Stats: solved, patterns, groups     |
+```bash
+npm start --prefix server
+```
 
----
+The local API will run at `http://localhost:5000/api`.
 
-## 👥 Contributors
+### 4. Start the frontend
 
-- [@hvsrajput](https://github.com/hvsrajput)
-- [@sahaymihir](https://github.com/sahaymihir)
+```bash
+npm run dev --prefix client
+```
 
----
+### 5. Optional root command
 
-## 📄 License
+On Unix-like shells you can also run:
+
+```bash
+npm start
+```
+
+That starts the server and client together using the root script.
+
+## Available Scripts
+
+### Root
+
+```bash
+npm run install-all
+npm run seed
+npm start
+```
+
+### Client
+
+```bash
+npm run dev --prefix client
+npm run build --prefix client
+npm run preview --prefix client
+npm run lint --prefix client
+```
+
+### Server
+
+```bash
+npm start --prefix server
+npm run seed --prefix server
+npm run package --prefix server
+```
+
+## API Overview
+
+### Auth
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `PUT /api/auth/me/leetcode-username`
+
+### Patterns
+
+- `GET /api/patterns`
+- `POST /api/patterns`
+
+### Problems
+
+- `GET /api/problems`
+- `GET /api/problems/search`
+- `GET /api/problems/lookup/:number`
+- `POST /api/problems`
+- `POST /api/problems/:id/status`
+- `POST /api/problems/:id/toggle` (legacy route still present)
+- `DELETE /api/problems/:id`
+
+### Groups
+
+- `GET /api/groups`
+- `POST /api/groups`
+- `GET /api/groups/:id`
+- `POST /api/groups/:id/members`
+- `POST /api/groups/:id/problems`
+- `DELETE /api/groups/:id/leave`
+
+### Dashboard
+
+- `GET /api/dashboard`
+- `GET /api/dashboard/heatmap`
+- `GET /api/dashboard/pattern-heatmap/:userId`
+- `GET /api/dashboard/company-progress/:userId`
+
+### LeetCode Integration
+
+- `POST /api/leetcode/import`
+- `POST /api/leetcode/sync`
+
+### Operational Endpoints
+
+- `GET /api/health`
+- `GET /api/backup`
+
+## Data Model Notes
+
+The backend uses a single DynamoDB table and stores multiple entity types with partition/sort key prefixes, including:
+
+- `USER#...`
+- `USERNAME#...`
+- `PROGRESS#...`
+- `PROBLEM#...`
+- `GROUP#...`
+- `USERGROUP#...`
+- `PATTERN`
+
+This is why most route code works through helper functions in [`server/db/dynamodb.js`](server/db/dynamodb.js) instead of an ORM.
+
+## Deployment Notes
+
+### Frontend
+
+- Designed for Vercel
+- SPA routing is handled by [`client/vercel.json`](client/vercel.json)
+
+### Backend
+
+- Package the Lambda bundle with:
+
+```bash
+npm run package --prefix server
+```
+
+- This creates `server/lambda-deploy.zip`
+- That zip is used for both:
+  - the main API Lambda
+  - the scheduled backup Lambda
+
+### Scheduled backups
+
+- [`server/lambda-backup.js`](server/lambda-backup.js) is the EventBridge-triggered backup worker
+- [`server/backup.js`](server/backup.js) scans DynamoDB and writes JSON snapshots to S3
+
+### `deploy.sh`
+
+[`deploy.sh`](deploy.sh) exists to automate packaging and Lambda uploads, but review it before using it in development. It currently runs a hard reset against `origin/main`, so it will discard uncommitted local changes.
+
+## Current Frontend And Backend Hosting
+
+Based on the current project setup:
+
+- Frontend is intended to be hosted on Vercel
+- Backend is intended to run on AWS Lambda behind API Gateway
+- Backups are intended to go to S3 on a schedule via EventBridge
+
+## License
 
 This project is private and not licensed for public use.
