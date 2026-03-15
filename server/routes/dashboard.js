@@ -1,9 +1,99 @@
 const express = require('express');
 const { auth } = require('../middleware/auth');
 const { queryItems, getItem, batchGetItems } = require('../db/dynamodb');
-const { getProblemsDataset } = require('../utils/problemsDataset');
+const { getProblemsDataset, getProblemByNumber } = require('../utils/problemsDataset');
 
 const router = express.Router();
+
+function isSolvedProgress(progress) {
+  if (!progress) {
+    return false;
+  }
+
+  if (typeof progress === 'boolean') {
+    return progress;
+  }
+
+  return progress.status === 'solved' || progress.solved === 1;
+}
+
+function getTrackedProblemTopics(problem) {
+  const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
+  const topics = datasetEntry?.topics?.length
+    ? datasetEntry.topics
+    : (problem.patternName ? [problem.patternName] : []);
+
+  return [...new Set((topics || []).filter(Boolean))];
+}
+
+function comparePatternStrengthDesc(a, b) {
+  return b.percent - a.percent
+    || b.solved - a.solved
+    || b.total - a.total
+    || a.pattern.localeCompare(b.pattern);
+}
+
+function comparePatternWeaknessAsc(a, b) {
+  return a.percent - b.percent
+    || b.total - a.total
+    || a.pattern.localeCompare(b.pattern);
+}
+
+function buildPatternInsights(trackedProblems, progressMap) {
+  const patternMap = {};
+
+  trackedProblems.forEach((problem) => {
+    const topics = getTrackedProblemTopics(problem);
+    const isSolved = isSolvedProgress(progressMap[String(problem.leetcodeNumber)]);
+
+    topics.forEach((topic) => {
+      if (!patternMap[topic]) {
+        patternMap[topic] = { name: topic, total: 0, solved: 0 };
+      }
+
+      patternMap[topic].total += 1;
+      if (isSolved) {
+        patternMap[topic].solved += 1;
+      }
+    });
+  });
+
+  const patternStats = Object.values(patternMap)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const allPatterns = patternStats
+    .map((pattern) => ({
+      pattern: pattern.name,
+      solved: pattern.solved,
+      total: pattern.total,
+      percent: pattern.total > 0 ? Math.round((pattern.solved / pattern.total) * 100) : 0,
+    }))
+    .sort(comparePatternStrengthDesc);
+
+  const strongest = allPatterns[0] || null;
+
+  const weakestCandidates = allPatterns
+    .filter((pattern) => pattern.solved > 0)
+    .sort(comparePatternWeaknessAsc);
+  const weakest = weakestCandidates[0]
+    || [...allPatterns].sort(comparePatternWeaknessAsc)[0]
+    || null;
+
+  const neglectedCandidates = allPatterns
+    .filter((pattern) => pattern.solved === 0)
+    .sort((a, b) => b.total - a.total || a.pattern.localeCompare(b.pattern));
+  const neglected = neglectedCandidates[0] || null;
+
+  return {
+    patternStats,
+    patternHeatmap: {
+      strongest,
+      weakest,
+      neglected,
+      allPatterns,
+    },
+  };
+}
 
 module.exports = function () {
   router.get('/', auth, async (req, res) => {
@@ -32,7 +122,6 @@ module.exports = function () {
       let totalAttempted = 0;
 
       // Pattern-wise and difficulty-wise breakdown
-      const patternMap = {};
       const difficultyMap = {};
 
       trackedProblems.forEach(p => {
@@ -42,15 +131,6 @@ module.exports = function () {
         const isAttempted = status === 'attempted';
         if (isSolved) totalSolved++;
         if (isAttempted) totalAttempted++;
-
-        // Pattern stats
-        if (p.patternName) {
-          if (!patternMap[p.patternName]) {
-            patternMap[p.patternName] = { name: p.patternName, total: 0, solved: 0 };
-          }
-          patternMap[p.patternName].total++;
-          if (isSolved) patternMap[p.patternName].solved++;
-        }
 
         // Difficulty stats
         if (p.difficulty) {
@@ -62,7 +142,7 @@ module.exports = function () {
         }
       });
 
-      const patternStats = Object.values(patternMap).sort((a, b) => a.name.localeCompare(b.name));
+      const { patternStats, patternHeatmap } = buildPatternInsights(trackedProblems, progressMap);
       const difficultyStats = Object.values(difficultyMap);
       // Group progress
       const userGroups = await queryItems(`USERGROUP#${req.userId}`, 'GROUP#');
@@ -117,45 +197,6 @@ module.exports = function () {
         }
       });
 
-      const solvedPatternMap = {};
-      trackedProblems.forEach((problem) => {
-        if (problem.patternName) {
-          if (!solvedPatternMap[problem.patternName]) {
-            solvedPatternMap[problem.patternName] = { pattern: problem.patternName, total: 0, solved: 0 };
-          }
-          solvedPatternMap[problem.patternName].total++;
-          if (progressMap[String(problem.leetcodeNumber)]?.solved === 1) {
-            solvedPatternMap[problem.patternName].solved++;
-          }
-        }
-      });
-
-      const allPatterns = Object.values(solvedPatternMap).map((pattern) => ({
-        pattern: pattern.pattern,
-        percent: pattern.total > 0 ? Math.round((pattern.solved / pattern.total) * 100) : 0,
-        solved: pattern.solved,
-        total: pattern.total,
-      })).sort((a, b) => b.percent - a.percent);
-
-      let strongest = null;
-      let weakest = null;
-      let neglected = null;
-
-      if (allPatterns.length > 0) {
-        strongest = allPatterns[0];
-        const attemptedPatterns = allPatterns.filter((pattern) => pattern.percent > 0);
-        weakest = attemptedPatterns.length > 0
-          ? attemptedPatterns[attemptedPatterns.length - 1]
-          : allPatterns[allPatterns.length - 1];
-
-        const unattemptedPatterns = allPatterns
-          .filter((pattern) => pattern.percent === 0)
-          .sort((a, b) => b.total - a.total);
-        if (unattemptedPatterns.length > 0) {
-          neglected = unattemptedPatterns[0];
-        }
-      }
-
       const problemsDataset = getProblemsDataset();
       const companyMap = {};
       problemsDataset.forEach((problem) => {
@@ -186,7 +227,7 @@ module.exports = function () {
         groupStats,
         recentSolved: recentSolved.slice(0, 10),
         heatmapData,
-        patternHeatmap: { strongest, weakest, neglected, allPatterns },
+        patternHeatmap,
         companyProgress,
       });
     } catch (err) {
@@ -246,10 +287,11 @@ module.exports = function () {
       const progressItems = await queryItems(`PROGRESS#${uId}`, 'PROB#');
       const progressMap = {};
       progressItems.forEach(p => {
-        progressMap[p.SK.replace('PROB#', '')] = p.solved === 1;
+        const lcNum = p.SK.replace('PROB#', '');
+        const status = p.status || (p.solved === 1 ? 'solved' : 'unsolved');
+        progressMap[lcNum] = { solved: p.solved, status };
       });
 
-      const patternMap = {};
       const trackedProblems = await batchGetItems(
         Object.keys(progressMap).map((lcNum) => ({
           PK: `PROBLEM#${lcNum}`,
@@ -257,49 +299,8 @@ module.exports = function () {
         }))
       );
 
-      trackedProblems.forEach(p => {
-        if (p.patternName) {
-          if (!patternMap[p.patternName]) {
-            patternMap[p.patternName] = { pattern: p.patternName, total: 0, solved: 0 };
-          }
-          patternMap[p.patternName].total++;
-          if (progressMap[String(p.leetcodeNumber)] === true) {
-            patternMap[p.patternName].solved++;
-          }
-        }
-      });
-
-      const allPatterns = Object.values(patternMap).map(p => ({
-        pattern: p.pattern,
-        percent: p.total > 0 ? Math.round((p.solved / p.total) * 100) : 0,
-        solved: p.solved,
-        total: p.total
-      }));
-
-      allPatterns.sort((a, b) => b.percent - a.percent);
-
-      let strongest = null;
-      let weakest = null;
-      let neglected = null;
-
-      if (allPatterns.length > 0) {
-        strongest = allPatterns[0];
-        // Weakest is the one with lowest % but > 0
-        const attempted = allPatterns.filter(p => p.percent > 0);
-        if (attempted.length > 0) {
-          weakest = attempted[attempted.length - 1];
-        } else {
-          weakest = allPatterns[allPatterns.length - 1];
-        }
-
-        // Neglected is the one with 0% and reasonably high total (or just lowest strictly)
-        const unattempted = allPatterns.filter(p => p.percent === 0).sort((a, b) => b.total - a.total);
-        if (unattempted.length > 0) {
-          neglected = unattempted[0];
-        }
-      }
-
-      res.json({ strongest, weakest, neglected, allPatterns });
+      const { patternHeatmap } = buildPatternInsights(trackedProblems, progressMap);
+      res.json(patternHeatmap);
     } catch (err) {
       console.error('Pattern Heatmap error:', err);
       res.status(500).json({ error: 'Failed to load pattern heatmap' });

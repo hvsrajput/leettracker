@@ -572,7 +572,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
           {result.mode === 'recent-sync' && result.bestEffortAttempted && result.recentAttemptedFound > 0 && (
             <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-sm">
-              Attempted imports are best-effort and only come from your recent public submissions. Solved problems still win if both signals exist.
+              Attempted imports are best-effort and only come from your recent public submissions.
             </div>
           )}
           
