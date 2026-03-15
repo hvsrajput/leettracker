@@ -231,18 +231,27 @@ async function fetchRecentSubmissionActivity(username) {
 
 module.exports = function () {
   router.post('/import', auth, async (req, res) => {
-    const { solvedMap } = req.body;
+    const hasStructuredPayload = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      && ('solvedMap' in req.body || 'attemptedMap' in req.body);
+    const solvedMap = hasStructuredPayload ? (req.body.solvedMap || {}) : (req.body || {});
+    const attemptedMap = hasStructuredPayload ? (req.body.attemptedMap || {}) : {};
 
-    if (!solvedMap || typeof solvedMap !== 'object' || Object.keys(solvedMap).length === 0) {
-      return res.status(400).json({ error: 'solvedMap is required. Please follow the import instructions.' });
+    const isSolvedMapValid = solvedMap && typeof solvedMap === 'object' && !Array.isArray(solvedMap);
+    const isAttemptedMapValid = attemptedMap && typeof attemptedMap === 'object' && !Array.isArray(attemptedMap);
+    const solvedEntries = isSolvedMapValid ? Object.entries(solvedMap) : [];
+    const attemptedEntries = isAttemptedMapValid ? Object.entries(attemptedMap) : [];
+
+    if (!isSolvedMapValid || !isAttemptedMapValid || (solvedEntries.length === 0 && attemptedEntries.length === 0)) {
+      return res.status(400).json({ error: 'Import data is required. Please follow the import instructions.' });
     }
 
     try {
       let solvedCount = 0;
+      let attemptedCount = 0;
       let alreadyExistsCount = 0;
       let failedCount = 0;
 
-      for (const [slug, unixTimestamp] of Object.entries(solvedMap)) {
+      for (const [slug, unixTimestamp] of solvedEntries) {
         try {
           let problemData = await resolveProblemData(slug);
           
@@ -264,13 +273,37 @@ module.exports = function () {
           failedCount++;
         }
       }
+
+      for (const [slug, unixTimestamp] of attemptedEntries) {
+        try {
+          const problemData = await resolveProblemData(slug);
+
+          if (!problemData) {
+            failedCount++;
+            continue;
+          }
+
+          const num = problemData.number;
+          const ts = toIsoTimestamp(unixTimestamp);
+
+          await ensureProblemExists(problemData, req.userId);
+
+          const result = await updateProgress(req.userId, num, 'attempted', ts);
+          if (result === 'attempted') attemptedCount++;
+          else alreadyExistsCount++;
+        } catch (err) {
+          console.error(`Failed to import attempted problem "${slug}":`, err.message);
+          failedCount++;
+        }
+      }
       
       res.json({ 
         success: true, 
         solved: solvedCount,
+        attempted: attemptedCount,
         alreadyExists: alreadyExistsCount,
         failed: failedCount,
-        total: Object.keys(solvedMap).length
+        total: solvedEntries.length + attemptedEntries.length
       });
     } catch (error) {
       console.error('LeetCode Import Error:', error);

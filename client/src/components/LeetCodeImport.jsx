@@ -3,7 +3,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
 const CONSOLE_SCRIPT = `(async () => {
-  console.log('LeetTracker: Fetching all solved problems...');
+  console.log('LeetTracker: Fetching solved and attempted problems...');
 
   const apiResp = await fetch('/api/problems/all/', {
     headers: { 'Content-Type': 'application/json' }
@@ -28,7 +28,8 @@ const CONSOLE_SCRIPT = `(async () => {
     }
   }\`;
 
-  const dateMap = {};
+  const solvedDateMap = {};
+  const attemptedDateMap = {};
   let offset = 0, hasNext = true, page = 1;
 
   while (hasNext) {
@@ -42,9 +43,17 @@ const CONSOLE_SCRIPT = `(async () => {
     const list = json?.data?.submissionList;
     if (!list) break;
 
-    for (const sub of list.submissions)
-      if (sub.statusDisplay === 'Accepted' && !dateMap[sub.titleSlug])
-        dateMap[sub.titleSlug] = sub.timestamp;
+    for (const sub of list.submissions) {
+      if (!sub?.titleSlug) continue;
+
+      if (sub.statusDisplay === 'Accepted') {
+        if (!solvedDateMap[sub.titleSlug]) {
+          solvedDateMap[sub.titleSlug] = sub.timestamp;
+        }
+      } else if (!attemptedDateMap[sub.titleSlug]) {
+        attemptedDateMap[sub.titleSlug] = sub.timestamp;
+      }
+    }
 
     hasNext = list.hasNext;
     offset += 50;
@@ -55,13 +64,24 @@ const CONSOLE_SCRIPT = `(async () => {
   const fallbackTs = Math.floor(Date.now() / 1000).toString();
   const solvedMap = {};
   for (const slug of allSlugs)
-    solvedMap[slug] = dateMap[slug] || fallbackTs;
+    solvedMap[slug] = solvedDateMap[slug] || fallbackTs;
+
+  const attemptedMap = {};
+  for (const [slug, timestamp] of Object.entries(attemptedDateMap))
+    if (!allSlugs.has(slug))
+      attemptedMap[slug] = timestamp || fallbackTs;
 
   const withDates = Object.values(solvedMap).filter(t => t !== fallbackTs).length;
   console.log(\`LeetTracker: \${withDates}/\${allSlugs.size} have exact dates. Rest use today as fallback.\`);
+  console.log(\`LeetTracker: Found \${Object.keys(attemptedMap).length} attempted-only problems.\`);
+
+  const importPayload = {
+    solvedMap,
+    attemptedMap
+  };
 
   // Prepare final JSON (pretty)
-  const finalJson = JSON.stringify(solvedMap, null, 2);
+  const finalJson = JSON.stringify(importPayload, null, 2);
 
   // 1) Try modern clipboard API
   let copied = false;
@@ -100,7 +120,7 @@ const CONSOLE_SCRIPT = `(async () => {
   }
 
   // 3) ALWAYS print to console for visibility
-  console.log('LeetTracker: Final solved map JSON (copy manually if needed):');
+  console.log('LeetTracker: Final import JSON (copy manually if needed):');
   console.log(finalJson);
 
   // 4) Create visible panel with textarea + buttons so user can manually copy/select
@@ -126,7 +146,7 @@ const CONSOLE_SCRIPT = `(async () => {
     panel.style.color = '#111';
 
     const title = document.createElement('div');
-    title.textContent = 'LeetTracker — solvedMap JSON';
+    title.textContent = 'LeetTracker — import JSON';
     title.style.fontWeight = '600';
     title.style.marginBottom = '8px';
     panel.appendChild(title);
@@ -283,10 +303,33 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
     setError('');
     setLoading(true);
 
-    let solvedMap;
+    let importPayload;
     try {
-      solvedMap = JSON.parse(pastedData.trim());
-      if (typeof solvedMap !== 'object' || Array.isArray(solvedMap)) throw new Error();
+      const parsed = JSON.parse(pastedData.trim());
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+
+      if ('solvedMap' in parsed || 'attemptedMap' in parsed) {
+        importPayload = {
+          solvedMap: parsed.solvedMap && typeof parsed.solvedMap === 'object' && !Array.isArray(parsed.solvedMap)
+            ? parsed.solvedMap
+            : {},
+          attemptedMap: parsed.attemptedMap && typeof parsed.attemptedMap === 'object' && !Array.isArray(parsed.attemptedMap)
+            ? parsed.attemptedMap
+            : {},
+        };
+      } else {
+        importPayload = {
+          solvedMap: parsed,
+          attemptedMap: {},
+        };
+      }
+
+      if (
+        Object.keys(importPayload.solvedMap).length === 0
+        && Object.keys(importPayload.attemptedMap).length === 0
+      ) {
+        throw new Error();
+      }
     } catch {
       setError('Invalid data. Make sure you pasted the full output from the console script.');
       setLoading(false);
@@ -294,8 +337,8 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
     }
 
     try {
-      const resp = await api.post('/leetcode/import', { solvedMap });
-      setResult(resp.data);
+      const resp = await api.post('/leetcode/import', importPayload);
+      setResult({ ...resp.data, mode: 'advanced-import' });
       setStep(4);
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -370,7 +413,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
                 </div>
               </div>
               <p className="text-sm text-gray-400 leading-relaxed">
-                Uses a browser script to fetch your entire solved history with exact dates for every problem. Recommended for first-time setup.
+                Uses a browser script to fetch your full solved history and attempted-only problems from your logged-in LeetCode session.
               </p>
             </button>
           </div>
@@ -456,7 +499,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
               <li>On the LeetCode tab, press <kbd className="bg-white/10 px-1 rounded text-gray-200">F12</kbd> (Windows) or <kbd className="bg-white/10 px-1 rounded text-gray-200">Cmd + Option + J</kbd> (Mac) to open DevTools.</li>
               <li>Click the <strong className="text-white">Console</strong> tab.</li>
               <li>Copy the script below and paste it into the console, then press <kbd className="bg-white/10 px-1 rounded text-gray-200">Enter</kbd>.</li>
-              <li>Wait for the message: <code className="text-[#FFA116] bg-[#FFA116]/10 px-1 rounded">LeetTracker: Copied to clipboard!</code></li>
+              <li>Wait for the floating panel or the final import JSON in the console.</li>
             </ol>
           </div>
 
@@ -502,7 +545,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
           <textarea
             className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-mono text-sm text-gray-300 focus:border-[#FFA116] focus:ring-1 focus:ring-[#FFA116] outline-none transition-all placeholder:text-gray-600"
             rows={5}
-            placeholder='Paste your data here... it should start with {"two-sum":"1693000000",...}'
+            placeholder='Paste your data here... it should start with {"solvedMap":{...},"attemptedMap":{...}}'
             value={pastedData}
             onChange={e => {
               setPastedData(e.target.value);
@@ -539,12 +582,12 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
             <h3 className="text-2xl font-bold text-white mb-2">Import Complete!</h3>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid gap-4 ${typeof result.attempted === 'number' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2'}`}>
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-green-400">{result.solved}</div>
               <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{result.mode === 'recent-sync' ? 'Solved Imported' : 'Newly Imported'}</div>
             </div>
-            {result.mode === 'recent-sync' && (
+            {typeof result.attempted === 'number' && (
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
                 <div className="text-2xl font-bold text-yellow-300">{result.attempted || 0}</div>
                 <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Attempted Imported</div>
