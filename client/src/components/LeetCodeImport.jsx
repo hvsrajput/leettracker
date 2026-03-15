@@ -245,15 +245,29 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
       // 2. Trigger sync
       const resp = await api.post('/leetcode/sync');
-      const { newlyImported, alreadyTracked, totalFound, failed = 0, totalSolvedOnLeetCode = 0 } = resp.data;
+      const {
+        newlyImported,
+        attemptedImported = 0,
+        alreadyTracked,
+        totalFound,
+        failed = 0,
+        totalSolvedOnLeetCode = 0,
+        recentSolvedFound = 0,
+        recentAttemptedFound = 0,
+        bestEffortAttempted = false,
+      } = resp.data;
       
       setResult({
         mode: 'recent-sync',
         solved: newlyImported,
+        attempted: attemptedImported,
         alreadyExists: alreadyTracked,
         failed,
         total: totalFound,
         totalSolvedOnLeetCode,
+        recentSolvedFound,
+        recentAttemptedFound,
+        bestEffortAttempted,
       });
       setStep(4);
       if (onSuccess) onSuccess();
@@ -333,7 +347,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
                 </div>
               </div>
               <p className="text-sm text-gray-400 leading-relaxed">
-                Uses your public profile to import recently solved problems. Fast and easy, but limited to your most recent public accepted submissions.
+                Uses your public profile to import recent solved problems plus best-effort recent attempts. Fast and easy, but limited to your most recent public activity.
               </p>
             </button>
 
@@ -368,7 +382,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
         <div className="space-y-6 animate-fade-in">
           <div>
             <h3 className="text-xl font-bold text-white mb-2">Set Your LeetCode Username</h3>
-            <p className="text-gray-400 text-sm">We need your public username to fetch your solved problems.</p>
+            <p className="text-gray-400 text-sm">We need your public username to fetch your recent solved and attempted activity.</p>
           </div>
           
           <div className="space-y-4">
@@ -406,7 +420,7 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p className="text-gray-400 animate-pulse">Fetching your recent LeetCode accepted submissions...</p>
+            <p className="text-gray-400 animate-pulse">Fetching your recent LeetCode activity...</p>
          </div>
       )}
 
@@ -528,11 +542,17 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-green-400">{result.solved}</div>
-              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Newly Imported</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{result.mode === 'recent-sync' ? 'Solved Imported' : 'Newly Imported'}</div>
             </div>
+            {result.mode === 'recent-sync' && (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+                <div className="text-2xl font-bold text-yellow-300">{result.attempted || 0}</div>
+                <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Attempted Imported</div>
+              </div>
+            )}
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-gray-300">{result.alreadyExists}</div>
-              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">Already Existed</div>
+              <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{result.mode === 'recent-sync' ? 'Already Up To Date' : 'Already Existed'}</div>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
               <div className="text-2xl font-bold text-red-400">{result.failed}</div>
@@ -546,7 +566,13 @@ export default function LeetCodeImport({ onSuccess, onCancel }) {
 
           {result.mode === 'recent-sync' && result.total === 0 && result.totalSolvedOnLeetCode > 0 && (
             <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
-              No recent accepted submissions were available to import right now. Use Advanced Import once if you want your full LeetCode history.
+              No recent public activity was available to import right now. Use Advanced Import once if you want your full LeetCode history.
+            </div>
+          )}
+
+          {result.mode === 'recent-sync' && result.bestEffortAttempted && result.recentAttemptedFound > 0 && (
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-sm">
+              Attempted imports are best-effort and only come from your recent public submissions. Solved problems still win if both signals exist.
             </div>
           )}
           

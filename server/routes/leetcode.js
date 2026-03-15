@@ -5,6 +5,13 @@ const { putItem, getItem, queryItems } = require('../db/dynamodb');
 const { getProblemBySlug } = require('../utils/problemsDataset');
 
 const router = express.Router();
+const LEETCODE_GRAPHQL_URL = 'https://leetcode.com/graphql';
+const LEETCODE_HEADERS = {
+  'Content-Type': 'application/json',
+  'Referer': 'https://leetcode.com',
+  'Origin': 'https://leetcode.com',
+  'User-Agent': 'Mozilla/5.0',
+};
 
 // Helper: fetch problem metadata from LeetCode GraphQL by titleSlug
 async function fetchProblemFromLeetCode(titleSlug) {
@@ -22,7 +29,7 @@ async function fetchProblemFromLeetCode(titleSlug) {
         }
       }
     `;
-    const resp = await axios.post('https://leetcode.com/graphql', {
+    const resp = await axios.post(LEETCODE_GRAPHQL_URL, {
       query,
       variables: { titleSlug }
     }, {
@@ -52,6 +59,15 @@ async function fetchProblemFromLeetCode(titleSlug) {
 
 async function resolveProblemData(titleSlug) {
   return getProblemBySlug(titleSlug) || await fetchProblemFromLeetCode(titleSlug);
+}
+
+function toIsoTimestamp(unixTimestamp, fallbackTimestamp = new Date().toISOString()) {
+  const parsed = Number.parseInt(unixTimestamp, 10);
+  return Number.isFinite(parsed) ? new Date(parsed * 1000).toISOString() : fallbackTimestamp;
+}
+
+function isAcceptedSubmission(submission) {
+  return submission?.statusDisplay === 'Accepted' || submission?.status === 10;
 }
 
 // Helper: ensure problem exists in DB, create if not
@@ -130,16 +146,11 @@ async function fetchAcceptedProblemData(username) {
     }
   `;
 
-  const response = await axios.post('https://leetcode.com/graphql', {
+  const response = await axios.post(LEETCODE_GRAPHQL_URL, {
     query: profileQuery,
     variables: { username }
   }, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Referer': 'https://leetcode.com',
-      'Origin': 'https://leetcode.com',
-      'User-Agent': 'Mozilla/5.0',
-    },
+    headers: LEETCODE_HEADERS,
     timeout: 10000
   });
 
@@ -175,16 +186,11 @@ async function fetchRecentAcceptedSubmissionDates(username) {
     }
   `;
 
-  const response = await axios.post('https://leetcode.com/graphql', {
+  const response = await axios.post(LEETCODE_GRAPHQL_URL, {
     query: subQuery,
     variables: { username, limit: 50 }
   }, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Referer': 'https://leetcode.com',
-      'Origin': 'https://leetcode.com',
-      'User-Agent': 'Mozilla/5.0',
-    },
+    headers: LEETCODE_HEADERS,
     timeout: 5000
   });
 
@@ -193,6 +199,34 @@ async function fetchRecentAcceptedSubmissionDates(username) {
   }
 
   return response.data?.data?.recentAcSubmissionList || [];
+}
+
+async function fetchRecentSubmissionActivity(username) {
+  const recentSubmissionQuery = `
+    query recentSubmissionList($username: String!, $limit: Int!) {
+      recentSubmissionList(username: $username, limit: $limit) {
+        title
+        titleSlug
+        status
+        statusDisplay
+        timestamp
+      }
+    }
+  `;
+
+  const response = await axios.post(LEETCODE_GRAPHQL_URL, {
+    query: recentSubmissionQuery,
+    variables: { username, limit: 20 }
+  }, {
+    headers: LEETCODE_HEADERS,
+    timeout: 5000
+  });
+
+  if (response.data?.errors?.length) {
+    throw new Error(response.data.errors[0].message || 'Failed to fetch recent submission activity');
+  }
+
+  return response.data?.data?.recentSubmissionList || [];
 }
 
 module.exports = function () {
@@ -254,25 +288,53 @@ module.exports = function () {
         return res.status(400).json({ error: 'LeetCode username not set in profile' });
       }
 
-      const { totalSolved } = await fetchAcceptedProblemData(username);
-      const recentAcceptedSubmissions = await fetchRecentAcceptedSubmissionDates(username);
-      const recentSubmissionMap = new Map();
+      const [
+        { totalSolved },
+        recentAcceptedSubmissions,
+        recentSubmissions,
+      ] = await Promise.all([
+        fetchAcceptedProblemData(username),
+        fetchRecentAcceptedSubmissionDates(username),
+        fetchRecentSubmissionActivity(username),
+      ]);
 
+      const recentSolvedMap = new Map();
       recentAcceptedSubmissions.forEach((submission) => {
-        if (!recentSubmissionMap.has(submission.titleSlug)) {
-          recentSubmissionMap.set(
+        if (!submission?.titleSlug || recentSolvedMap.has(submission.titleSlug)) {
+          return;
+        }
+
+        recentSolvedMap.set(
+          submission.titleSlug,
+          toIsoTimestamp(submission.timestamp)
+        );
+      });
+
+      const recentAttemptedMap = new Map();
+      recentSubmissions.forEach((submission) => {
+        if (!submission?.titleSlug) {
+          return;
+        }
+
+        if (isAcceptedSubmission(submission) || recentSolvedMap.has(submission.titleSlug)) {
+          return;
+        }
+
+        if (!recentAttemptedMap.has(submission.titleSlug)) {
+          recentAttemptedMap.set(
             submission.titleSlug,
-            new Date(parseInt(submission.timestamp, 10) * 1000).toISOString()
+            toIsoTimestamp(submission.timestamp)
           );
         }
       });
 
       const defaultTimestamp = new Date().toISOString();
       let newlyImported = 0;
+      let attemptedImported = 0;
       let alreadyTracked = 0;
       let failed = 0;
 
-      for (const [slug, timestamp] of recentSubmissionMap.entries()) {
+      for (const [slug, timestamp] of recentSolvedMap.entries()) {
         const problemData = await resolveProblemData(slug);
         if (problemData) {
           const num = problemData.number;
@@ -286,13 +348,31 @@ module.exports = function () {
         }
       }
 
+      for (const [slug, timestamp] of recentAttemptedMap.entries()) {
+        const problemData = await resolveProblemData(slug);
+        if (problemData) {
+          const num = problemData.number;
+          const ts = timestamp || defaultTimestamp;
+          await ensureProblemExists(problemData, req.userId);
+          const result = await updateProgress(req.userId, num, 'attempted', ts);
+          if (result === 'attempted') attemptedImported++;
+          else alreadyTracked++;
+        } else {
+          failed++;
+        }
+      }
+
       res.json({ 
         success: true, 
         newlyImported, 
+        attemptedImported,
         alreadyTracked, 
         failed,
-        totalFound: recentSubmissionMap.size,
+        totalFound: recentSolvedMap.size + recentAttemptedMap.size,
         totalSolvedOnLeetCode: totalSolved,
+        recentSolvedFound: recentSolvedMap.size,
+        recentAttemptedFound: recentAttemptedMap.size,
+        bestEffortAttempted: true,
       });
     } catch (error) {
       console.error('LeetCode Sync Error:', error);
