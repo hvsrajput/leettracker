@@ -6,6 +6,24 @@ const { getProblemByNumber } = require('../utils/problemsDataset');
 
 const router = express.Router();
 
+function serializeGroupProblem(problem) {
+  if (!problem) {
+    return null;
+  }
+
+  const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
+  return {
+    id: problem.leetcodeNumber,
+    leetcode_number: problem.leetcodeNumber,
+    title: problem.title,
+    difficulty: problem.difficulty,
+    url: problem.url,
+    pattern_name: problem.patternName,
+    topics: datasetEntry ? (datasetEntry.topics || []) : [],
+    companies: datasetEntry ? (datasetEntry.companies || []) : [],
+  };
+}
+
 module.exports = function () {
   // List user's groups
   router.get('/', auth, async (req, res) => {
@@ -262,6 +280,76 @@ module.exports = function () {
   });
 
   // Add problem to group
+  router.post('/:id/problems/bulk', auth, async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const rawProblemIds = Array.isArray(req.body?.problem_ids) ? req.body.problem_ids : [];
+      const problemIds = [...new Set(
+        rawProblemIds
+          .map((problemId) => parseInt(problemId, 10))
+          .filter((problemId) => Number.isInteger(problemId) && problemId > 0)
+      )];
+
+      if (problemIds.length === 0) {
+        return res.status(400).json({ error: 'problem_ids must be a non-empty array' });
+      }
+
+      const existingGroupProblems = await queryItems(`GROUP#${groupId}`, 'PROBLEM#');
+      const existingIds = new Set(
+        existingGroupProblems.map((item) => parseInt(item.SK.replace('PROBLEM#', ''), 10))
+      );
+
+      const problemDetails = await batchGetItems(
+        problemIds.map((problemId) => ({
+          PK: `PROBLEM#${problemId}`,
+          SK: 'DETAIL',
+        }))
+      );
+      const problemsById = new Map(
+        problemDetails.map((problem) => [problem.leetcodeNumber, problem])
+      );
+
+      const added = [];
+      const failed = [];
+      let alreadyInGroupCount = 0;
+      const addedAt = new Date().toISOString();
+
+      for (const problemId of problemIds) {
+        if (existingIds.has(problemId)) {
+          alreadyInGroupCount += 1;
+          continue;
+        }
+
+        const problem = problemsById.get(problemId);
+        if (!problem) {
+          failed.push({ problem_id: problemId, error: 'Problem not found' });
+          continue;
+        }
+
+        await putItem({
+          PK: `GROUP#${groupId}`,
+          SK: `PROBLEM#${problemId}`,
+          addedBy: req.userId,
+          addedAt,
+        });
+
+        existingIds.add(problemId);
+        added.push(serializeGroupProblem(problem));
+      }
+
+      res.json({
+        added,
+        addedCount: added.length,
+        alreadyInGroupCount,
+        failedCount: failed.length,
+        failed,
+      });
+    } catch (err) {
+      console.error('Bulk add group problems error:', err);
+      res.status(500).json({ error: 'Failed to add problems to group' });
+    }
+  });
+
   router.post('/:id/problems', auth, async (req, res) => {
     try {
       const groupId = req.params.id;
@@ -285,21 +373,7 @@ module.exports = function () {
 
       // Get problem details to return
       const problem = await getItem(`PROBLEM#${lcNum}`, 'DETAIL');
-      if (problem) {
-        const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
-        res.json({
-          id: problem.leetcodeNumber,
-          leetcode_number: problem.leetcodeNumber,
-          title: problem.title,
-          difficulty: problem.difficulty,
-          url: problem.url,
-          pattern_name: problem.patternName,
-          topics: datasetEntry ? (datasetEntry.topics || []) : [],
-          companies: datasetEntry ? (datasetEntry.companies || []) : [],
-        });
-      } else {
-        res.json({ id: lcNum, leetcode_number: lcNum });
-      }
+      res.json(serializeGroupProblem(problem) || { id: lcNum, leetcode_number: lcNum });
     } catch (err) {
       console.error('Add group problem error:', err);
       res.status(500).json({ error: 'Failed to add problem to group' });

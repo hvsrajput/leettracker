@@ -240,17 +240,52 @@ export default function GroupDetail() {
     }
   };
 
-  const handleAddMultipleFromProblemset = async (problemsToAdd) => {
-    const results = await Promise.allSettled(
-      problemsToAdd.map(async (problem) => {
-        const res = await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
-        return { addedProblem: res.data, sourceProblem: problem };
-      })
-    );
+  const addProblemsInChunks = async (problemsToAdd, chunkSize = 4) => {
+    const succeeded = [];
+    let failedCount = 0;
 
-    const succeeded = results
-      .filter(result => result.status === 'fulfilled')
-      .map(result => result.value);
+    for (let i = 0; i < problemsToAdd.length; i += chunkSize) {
+      const chunk = problemsToAdd.slice(i, i + chunkSize);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(async (problem) => {
+          const res = await api.post(`/groups/${id}/problems`, { problem_id: problem.id });
+          return { addedProblem: res.data, sourceProblem: problem };
+        })
+      );
+
+      chunkResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          succeeded.push(result.value);
+        } else {
+          failedCount += 1;
+        }
+      });
+    }
+
+    return { succeeded, failedCount };
+  };
+
+  const handleAddMultipleFromProblemset = async (problemsToAdd) => {
+    let succeeded = [];
+    let failedCount = 0;
+
+    try {
+      const res = await api.post(`/groups/${id}/problems/bulk`, {
+        problem_ids: problemsToAdd.map((problem) => problem.id),
+      });
+
+      const problemsById = new Map(problemsToAdd.map((problem) => [problem.id, problem]));
+      succeeded = (res.data?.added || []).map((addedProblem) => ({
+        addedProblem,
+        sourceProblem: problemsById.get(addedProblem.id) || problemsById.get(addedProblem.leetcode_number),
+      })).filter((entry) => entry.sourceProblem);
+      failedCount = res.data?.failedCount || 0;
+    } catch (err) {
+      console.warn('Bulk add failed, falling back to throttled single adds:', err);
+      const fallbackResults = await addProblemsInChunks(problemsToAdd);
+      succeeded = fallbackResults.succeeded;
+      failedCount = fallbackResults.failedCount;
+    }
 
     succeeded.forEach(({ addedProblem, sourceProblem }) => {
       upsertGroupProblem(addedProblem, sourceProblem.status || 'unsolved');
@@ -258,7 +293,7 @@ export default function GroupDetail() {
 
     return {
       addedCount: succeeded.length,
-      failedCount: results.length - succeeded.length,
+      failedCount,
     };
   };
 
