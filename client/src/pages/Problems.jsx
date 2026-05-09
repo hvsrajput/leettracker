@@ -1,7 +1,54 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api';
 import LeetCodeImport from '../components/LeetCodeImport';
 import { COMPANY_OPTIONS, getProblemTopics } from '../utils/problemFilters';
+
+const BULK_ADD_CONCURRENCY = 3;
+
+function createEmptyBulkProgress(total = 0) {
+  return {
+    total,
+    completed: 0,
+    added: 0,
+    skipped: 0,
+    failed: 0,
+  };
+}
+
+function parseBulkProblemNumbers(input) {
+  const tokens = input.split(/[,\s;]+/).map(token => token.trim()).filter(Boolean);
+  const seen = new Set();
+  const numbers = [];
+  const duplicates = [];
+  const invalidTokens = [];
+
+  tokens.forEach(token => {
+    if (!/^\d+$/.test(token)) {
+      invalidTokens.push(token);
+      return;
+    }
+
+    const number = Number(token);
+    if (!Number.isSafeInteger(number) || number <= 0) {
+      invalidTokens.push(token);
+      return;
+    }
+
+    if (seen.has(number)) {
+      duplicates.push(number);
+      return;
+    }
+
+    seen.add(number);
+    numbers.push(number);
+  });
+
+  return { tokens, numbers, duplicates, invalidTokens };
+}
+
+function getProblemNumber(problem) {
+  return Number(problem?.leetcode_number ?? problem?.id);
+}
 
 export default function Problems() {
   const [allProblems, setAllProblems] = useState([]);
@@ -16,17 +63,23 @@ export default function Problems() {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [preview, setPreview] = useState(null);
   const [addError, setAddError] = useState('');
+  const [addMode, setAddMode] = useState('single');
+  const [bulkInput, setBulkInput] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [isBulkAdding, setIsBulkAdding] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(() => createEmptyBulkProgress());
+  const [bulkResults, setBulkResults] = useState([]);
+  const searchTimeoutRef = useRef(null);
 
   const fetchProblems = () => {
     setLoading(true);
-    api.getCached('/problems', {}, 10000)
+    return api.getCached('/problems', {}, 10000)
       .then(res => setAllProblems(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -34,6 +87,14 @@ export default function Problems() {
 
   useEffect(() => {
     fetchProblems();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Compute dynamic topic tabs from all problems
@@ -56,22 +117,61 @@ export default function Problems() {
     });
   }, [allProblems, activePattern, difficultyFilter, solvedFilter, companyFilter]);
 
-  let searchTimeout = null;
+  const bulkParseResult = useMemo(() => parseBulkProblemNumbers(bulkInput), [bulkInput]);
+  const bulkCompletionPercent = bulkProgress.total > 0
+    ? Math.round((bulkProgress.completed / bulkProgress.total) * 100)
+    : 0;
+
+  const addProblemToList = (problem) => {
+    if (!problem) return;
+
+    setAllProblems(prev => {
+      const incomingNumber = getProblemNumber(problem);
+      const exists = prev.some(item => getProblemNumber(item) === incomingNumber);
+      if (exists) return prev;
+      return [...prev, problem].sort((a, b) => getProblemNumber(a) - getProblemNumber(b));
+    });
+  };
+
+  const resetAddModalState = () => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    setPreview(null);
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsSearching(false);
+    setAddError('');
+    setAddMode('single');
+    setBulkInput('');
+    setBulkError('');
+    setIsBulkAdding(false);
+    setBulkProgress(createEmptyBulkProgress());
+    setBulkResults([]);
+  };
+
+  const closeAddModal = () => {
+    if (isBulkAdding) return;
+    setShowAddModal(false);
+    resetAddModalState();
+  };
 
   const handleSearch = async (query) => {
     setSearchQuery(query);
     setPreview(null);
     setAddError('');
     
-    if (searchTimeout) clearTimeout(searchTimeout);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     
     if (!query.trim()) {
       setSearchResults([]);
+      setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
-    searchTimeout = setTimeout(async () => {
+    searchTimeoutRef.current = setTimeout(async () => {
       try {
         const res = await api.get(`/problems/search?q=${encodeURIComponent(query)}`);
         setSearchResults(res.data);
@@ -84,9 +184,14 @@ export default function Problems() {
   };
 
   const handleSelectProblem = (prob) => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
     setPreview(prob);
     setSearchQuery('');
     setSearchResults([]);
+    setIsSearching(false);
     setAddError('');
   };
 
@@ -100,16 +205,108 @@ export default function Problems() {
         difficulty: preview.difficulty,
         pattern_name: preview.topics?.[0] || null
       });
-      setAllProblems(prev => {
-        const exists = prev.some(problem => problem.id === res.data.id);
-        if (exists) return prev;
-        return [...prev, res.data].sort((a, b) => a.leetcode_number - b.leetcode_number);
-      });
-      setShowAddModal(false);
-      setPreview(null);
-      setSearchQuery('');
+      addProblemToList(res.data);
+      closeAddModal();
     } catch (err) {
       setAddError(err.response?.data?.error || 'Failed to add problem');
+    }
+  };
+
+  const recordBulkResult = (result) => {
+    setBulkResults(prev => [...prev, result]);
+    setBulkProgress(prev => {
+      const next = {
+        ...prev,
+        completed: prev.completed + 1,
+      };
+
+      if (result.status === 'added') {
+        next.added += 1;
+      } else if (result.status === 'skipped') {
+        next.skipped += 1;
+      } else {
+        next.failed += 1;
+      }
+
+      return next;
+    });
+  };
+
+  const handleBulkAddProblems = async () => {
+    if (isBulkAdding) return;
+
+    const { numbers, duplicates, invalidTokens } = bulkParseResult;
+    if (numbers.length === 0) {
+      setBulkError('Enter at least one valid LeetCode question number.');
+      return;
+    }
+
+    const preflightResults = [
+      ...duplicates.map(number => ({
+        status: 'duplicate',
+        number,
+        message: 'Duplicate in input',
+      })),
+      ...invalidTokens.map(token => ({
+        status: 'invalid',
+        token,
+        message: 'Invalid number',
+      })),
+    ];
+
+    setBulkError('');
+    setBulkResults(preflightResults);
+    setBulkProgress(createEmptyBulkProgress(numbers.length));
+    setIsBulkAdding(true);
+
+    let nextIndex = 0;
+
+    const addNextProblem = async () => {
+      while (nextIndex < numbers.length) {
+        const number = numbers[nextIndex];
+        nextIndex += 1;
+
+        try {
+          const res = await api.post('/problems', {
+            leetcode_number: number,
+            require_dataset: true,
+          });
+          addProblemToList(res.data);
+          recordBulkResult({
+            status: 'added',
+            number,
+            title: res.data.title,
+            message: 'Added',
+          });
+        } catch (err) {
+          const responseData = err.response?.data || {};
+          const alreadyTracked = responseData.error === 'Problem already in your list' && responseData.problem;
+
+          if (alreadyTracked) {
+            addProblemToList(responseData.problem);
+            recordBulkResult({
+              status: 'skipped',
+              number,
+              title: responseData.problem.title,
+              message: 'Already tracked',
+            });
+          } else {
+            recordBulkResult({
+              status: 'failed',
+              number,
+              message: responseData.error || 'Failed to add problem',
+            });
+          }
+        }
+      }
+    };
+
+    try {
+      const workerCount = Math.min(BULK_ADD_CONCURRENCY, numbers.length);
+      await Promise.all(Array.from({ length: workerCount }, addNextProblem));
+      await fetchProblems();
+    } finally {
+      setIsBulkAdding(false);
     }
   };
 
@@ -579,83 +776,249 @@ export default function Problems() {
 
       {/* Add Problem Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl relative" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold text-white mb-6">Add Problem</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeAddModal}>
+          <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 w-full max-w-xl shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-white mb-5">Add Problem</h2>
+
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/40 border border-white/10 p-1 mb-6">
+              <button
+                type="button"
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  addMode === 'single'
+                    ? 'bg-white text-black shadow'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                } ${isBulkAdding ? 'cursor-not-allowed opacity-60' : ''}`}
+                onClick={() => {
+                  if (isBulkAdding) return;
+                  setAddMode('single');
+                  setBulkError('');
+                }}
+                disabled={isBulkAdding}
+              >
+                Single
+              </button>
+              <button
+                type="button"
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                  addMode === 'bulk'
+                    ? 'bg-white text-black shadow'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                } ${isBulkAdding ? 'cursor-not-allowed opacity-60' : ''}`}
+                onClick={() => {
+                  if (isBulkAdding) return;
+                  setAddMode('bulk');
+                  setAddError('');
+                }}
+                disabled={isBulkAdding}
+              >
+                Bulk
+              </button>
+            </div>
+
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Search Title or #</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => handleSearch(e.target.value)}
-                    placeholder="e.g. Two Sum..."
-                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white pl-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder-gray-600"
-                    autoComplete="off"
-                  />
-                  <svg className="w-5 h-5 absolute left-3 top-3 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                  </svg>
-                  {isSearching && <span className="absolute right-3 top-2.5 text-indigo-400">
-                    <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  </span>}
-                </div>
-                
-                {searchResults.length > 0 && (
-                  <div className="absolute left-6 right-6 mt-1 bg-neutral-800 border border-white/10 rounded-lg shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto">
-                    {searchResults.map(res => (
-                      <div 
-                        key={res.number} 
-                        className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0"
-                        onClick={() => handleSelectProblem(res)}
-                      >
-                        <span className="text-gray-500 font-mono text-xs w-8">#{res.number}</span>
-                        <span className="font-medium text-gray-200 flex-1 truncate">{res.title}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          res.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400' : 
-                          res.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400' : 
-                          'bg-red-500/10 text-red-400'
-                        }`}>{res.difficulty}</span>
+              {addMode === 'single' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Search Title or #</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => handleSearch(e.target.value)}
+                        placeholder="e.g. Two Sum..."
+                        className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2.5 text-white pl-10 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder-gray-600"
+                        autoComplete="off"
+                      />
+                      <svg className="w-5 h-5 absolute left-3 top-3 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                      </svg>
+                      {isSearching && <span className="absolute right-3 top-2.5 text-indigo-400">
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      </span>}
+                    </div>
+                    
+                    {searchResults.length > 0 && (
+                      <div className="absolute left-6 right-6 mt-1 bg-neutral-800 border border-white/10 rounded-lg shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto">
+                        {searchResults.map(res => (
+                          <div 
+                            key={res.number} 
+                            className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0"
+                            onClick={() => handleSelectProblem(res)}
+                          >
+                            <span className="text-gray-500 font-mono text-xs w-8">#{res.number}</span>
+                            <span className="font-medium text-gray-200 flex-1 truncate">{res.title}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              res.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400' : 
+                              res.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400' : 
+                              'bg-red-500/10 text-red-400'
+                            }`}>{res.difficulty}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
 
-              {addError && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{addError}</div>}
+                  {addError && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{addError}</div>}
 
-              {preview && (
-                <div className="bg-white/5 border border-white/10 rounded-xl p-4 mt-4">
-                  <div className="font-medium text-white mb-2">{preview.title}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      preview.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
-                      preview.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
-                      'bg-red-500/10 text-red-400 border-red-500/20'
-                    } border`}>{preview.difficulty}</span>
-                    {preview.topics && preview.topics.map(t => (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20" key={t}>{t}</span>
-                    ))}
+                  {preview && (
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 mt-4">
+                      <div className="font-medium text-white mb-2">{preview.title}</div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          preview.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
+                          preview.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
+                          'bg-red-500/10 text-red-400 border-red-500/20'
+                        } border`}>{preview.difficulty}</span>
+                        {preview.topics && preview.topics.map(t => (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20" key={t}>{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {addMode === 'bulk' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">LeetCode Question Numbers</label>
+                    <textarea
+                      value={bulkInput}
+                      onChange={e => {
+                        setBulkInput(e.target.value);
+                        setBulkError('');
+                        setBulkResults([]);
+                        setBulkProgress(createEmptyBulkProgress());
+                      }}
+                      disabled={isBulkAdding}
+                      rows={6}
+                      placeholder={`1, 2, 15\n49 53 121\n200; 206; 217`}
+                      className="w-full resize-none bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder-gray-600 disabled:opacity-60 disabled:cursor-not-allowed"
+                    />
                   </div>
-                </div>
+
+                  {bulkInput.trim() && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                        <div className="text-lg font-bold text-white">{bulkParseResult.numbers.length}</div>
+                        <div className="text-[11px] uppercase tracking-wide text-gray-500">Unique</div>
+                      </div>
+                      <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                        <div className="text-lg font-bold text-yellow-400">{bulkParseResult.duplicates.length}</div>
+                        <div className="text-[11px] uppercase tracking-wide text-gray-500">Duplicates</div>
+                      </div>
+                      <div className="rounded-xl bg-white/5 border border-white/10 p-3">
+                        <div className="text-lg font-bold text-red-400">{bulkParseResult.invalidTokens.length}</div>
+                        <div className="text-[11px] uppercase tracking-wide text-gray-500">Invalid</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {bulkError && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{bulkError}</div>}
+
+                  {(bulkProgress.total > 0 || bulkResults.length > 0) && (
+                    <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-4">
+                      {bulkProgress.total > 0 && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-white">
+                              {isBulkAdding ? 'Adding problems...' : 'Bulk add complete'}
+                            </span>
+                            <span className="text-gray-400">{bulkProgress.completed} / {bulkProgress.total}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-black/50 border border-white/10 overflow-hidden">
+                            <div
+                              className="h-full bg-green-500 transition-all duration-300"
+                              style={{ width: `${bulkCompletionPercent}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="rounded-lg bg-green-500/10 border border-green-500/20 px-2 py-2 text-green-400">
+                              {bulkProgress.added} added
+                            </div>
+                            <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-2 py-2 text-yellow-400">
+                              {bulkProgress.skipped} tracked
+                            </div>
+                            <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-2 text-red-400">
+                              {bulkProgress.failed} failed
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {bulkResults.length > 0 && (
+                        <div className="max-h-44 overflow-y-auto divide-y divide-white/5 rounded-lg border border-white/10 bg-black/30">
+                          {bulkResults.map((result, index) => {
+                            const isGood = result.status === 'added';
+                            const isWarning = result.status === 'skipped' || result.status === 'duplicate';
+                            const badgeClass = isGood
+                              ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                              : isWarning
+                                ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                : 'bg-red-500/10 text-red-400 border-red-500/20';
+                            const statusLabel = result.status === 'added'
+                              ? 'Added'
+                              : result.status === 'skipped'
+                                ? 'Tracked'
+                                : result.status === 'duplicate'
+                                  ? 'Duplicate'
+                                  : result.status === 'invalid'
+                                    ? 'Invalid'
+                                    : 'Failed';
+                            const label = result.number ? `#${result.number}` : result.token;
+
+                            return (
+                              <div key={`${result.status}-${label}-${index}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                                <span className="font-mono text-gray-500 w-16 flex-shrink-0 truncate">{label}</span>
+                                <span className="text-gray-300 flex-1 min-w-0 truncate">{result.title || result.message}</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${badgeClass}`}>
+                                  {statusLabel}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
             <div className="flex justify-end gap-3 mt-8">
-              <button className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors" onClick={() => { setShowAddModal(false); setPreview(null); setSearchQuery(''); setSearchResults([]); }}>
-                Cancel
-              </button>
-              <button 
-                className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-                onClick={handleAddProblem} 
-                disabled={!preview}
+              <button
+                className="px-4 py-2 rounded-lg border border-white/10 text-gray-300 font-medium hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={closeAddModal}
+                disabled={isBulkAdding}
               >
-                Save
+                {addMode === 'bulk' && bulkProgress.completed > 0 && !isBulkAdding ? 'Close' : 'Cancel'}
               </button>
+              {addMode === 'single' ? (
+                <button 
+                  className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                  onClick={handleAddProblem} 
+                  disabled={!preview}
+                >
+                  Save
+                </button>
+              ) : (
+                <button
+                  className="px-6 py-2 rounded-lg bg-white text-black font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-w-32"
+                  onClick={handleBulkAddProblems}
+                  disabled={isBulkAdding || bulkParseResult.numbers.length === 0}
+                >
+                  {isBulkAdding && (
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                  {isBulkAdding ? 'Adding...' : 'Add Problems'}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -161,13 +161,14 @@ module.exports = function () {
   // Add problem by LeetCode number
   router.post('/', auth, async (req, res) => {
     try {
-      const { leetcode_number, title: manualTitle, difficulty: manualDiff, url: manualUrl, pattern_name } = req.body;
+      const { leetcode_number, title: manualTitle, difficulty: manualDiff, url: manualUrl, pattern_name, require_dataset } = req.body;
       const num = parseInt(leetcode_number);
       if (!num) {
         return res.status(400).json({ error: 'LeetCode number is required' });
       }
 
       const datasetEntry = getProblemByNumber(num);
+      const requireDataset = require_dataset === true;
 
       // Check if already tracking
       const progress = await getItem(`PROGRESS#${req.userId}`, `PROB#${num}`);
@@ -187,6 +188,10 @@ module.exports = function () {
             solved: progress.solved || 0,
           },
         });
+      }
+
+      if (requireDataset && !datasetEntry) {
+        return res.status(404).json({ error: 'Problem not found in dataset' });
       }
 
       // Lookup from dataset
