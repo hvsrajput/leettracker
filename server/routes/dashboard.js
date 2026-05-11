@@ -26,6 +26,15 @@ function getTrackedProblemTopics(problem) {
   return [...new Set((topics || []).filter(Boolean))];
 }
 
+function getLeetCodeProblemUrl(problem) {
+  const datasetEntry = getProblemByNumber(problem.leetcodeNumber);
+  const slug = problem.slug || datasetEntry?.slug;
+
+  return problem.url
+    || datasetEntry?.url
+    || (slug ? `https://leetcode.com/problems/${slug}/` : 'https://leetcode.com/problemset/');
+}
+
 function comparePatternStrengthDesc(a, b) {
   return b.percent - a.percent
     || b.solved - a.solved
@@ -182,6 +191,7 @@ module.exports = function () {
               leetcode_number: problem.leetcodeNumber,
               title: problem.title,
               difficulty: problem.difficulty,
+              url: getLeetCodeProblemUrl(problem),
               solved_at: prog.solvedAt,
             });
           }

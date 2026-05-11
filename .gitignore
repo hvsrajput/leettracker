@@ -34,3 +34,6 @@ coverage/
 .vercel
 .env*.local
 server/lambda-deploy.zip
+
+# Graphify
+graphify-out

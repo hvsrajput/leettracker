@@ -40,6 +40,15 @@ function getBestHeatmapYear(data) {
   return years.length > 0 ? Math.max(...years) : currentYear;
 }
 
+function getLeetCodeUrl(problem) {
+  if (problem.url) {
+    return problem.url;
+  }
+
+  const searchTerm = problem.leetcode_number || problem.title || '';
+  return `https://leetcode.com/problemset/all/?search=${encodeURIComponent(searchTerm)}`;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
@@ -345,23 +354,35 @@ export default function Dashboard() {
         <div className="space-y-6 pb-12">
           <h2 className="text-xl font-bold text-white">Recently Solved</h2>
           <div className="space-y-2">
-            {stats.recentSolved.map((p, i) => (
-              <div className="rounded-xl border border-white/5 bg-white-[0.02] backdrop-blur-sm p-4 flex items-center gap-4 transition-all duration-300 hover:bg-white/10 hover:translate-x-1" key={i}>
+            {stats.recentSolved.map((p) => (
+              <a
+                className="group rounded-xl border border-white/5 bg-white/[0.02] backdrop-blur-sm p-4 flex items-center gap-4 transition-all duration-300 hover:bg-white/10 hover:translate-x-1 hover:border-indigo-400/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+                href={getLeetCodeUrl(p)}
+                key={p.leetcode_number}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${p.title} on LeetCode`}
+              >
                 <span className="text-green-500 bg-green-500/10 p-1.5 rounded-lg flex-shrink-0">
                   <svg className="w-5 h-5 block" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                   </svg>
                 </span>
                 <span className="text-gray-500 font-mono text-sm w-12 flex-shrink-0">#{p.leetcode_number}</span>
-                <span className="font-semibold text-gray-200 flex-1 truncate">{p.title}</span>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase border ${
+                <span className="font-semibold text-gray-200 flex-1 min-w-0 truncate group-hover:text-indigo-300 transition-colors">{p.title}</span>
+                <span className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase border ${
                   p.difficulty === 'Easy' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 
                   p.difficulty === 'Medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 
                   'bg-red-500/10 text-red-400 border-red-500/20'
                 }`}>
                   {p.difficulty}
                 </span>
-              </div>
+                <span className="text-gray-500 group-hover:text-indigo-300 transition-colors flex-shrink-0" aria-hidden="true">
+                  <svg className="w-4 h-4 block" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H18m0 0v4.5M18 6 10.5 13.5M7 7.5H5.25A2.25 2.25 0 0 0 3 9.75v9A2.25 2.25 0 0 0 5.25 21h9A2.25 2.25 0 0 0 16.5 18.75V17" />
+                  </svg>
+                </span>
+              </a>
             ))}
           </div>
         </div>
