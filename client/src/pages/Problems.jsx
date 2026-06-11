@@ -3,6 +3,7 @@ import api from '../api';
 import LeetCodeImport from '../components/LeetCodeImport';
 import TopicTags from '../components/TopicTags';
 import TopicFilterTabs from '../components/TopicFilterTabs';
+import { CARD, Button, DifficultyBadge } from '../components/ui/primitives';
 import { getProblemTopics } from '../utils/problemFilters';
 
 const BULK_ADD_CONCURRENCY = 3;
@@ -379,36 +380,34 @@ export default function Problems() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-8 space-y-8 animate-fade-in">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-24 md:pb-12 space-y-8">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fade-in">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Problems</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Problems</h1>
           <p className="text-gray-400 mt-2">
-            {problems.filter(p => p.status === 'solved').length} solved, {problems.filter(p => p.status === 'attempted').length} attempted of {problems.length}
+            <span className="text-emerald-400 font-medium">{problems.filter(p => p.status === 'solved').length} solved</span>
+            <span className="text-gray-600"> · </span>
+            <span className="text-amber-400 font-medium">{problems.filter(p => p.status === 'attempted').length} attempted</span>
+            <span className="text-gray-600"> · </span>
+            {problems.length} total
             {activePattern !== 'all' && ` in ${activePattern}`}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <button 
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all font-medium text-sm text-gray-200"
-            onClick={() => setShowImportModal(true)}
-          >
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="subtle" onClick={() => setShowImportModal(true)}>
             <svg className="w-5 h-5 text-[#FFA116]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
             Import from LeetCode
-          </button>
-          <button 
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 border border-green-500 transition-all font-medium text-sm text-white shadow-lg shadow-green-900/20"
-            onClick={() => setShowAddModal(true)}
-          >
+          </Button>
+          <Button variant="primary" onClick={() => setShowAddModal(true)}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
             Add Problem
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
 
       {/* Dynamic Pattern Tabs */}

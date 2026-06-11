@@ -1,16 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
+import { useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export default function Heatmap({ data = {}, year = new Date().getFullYear() }) {
   const containerRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [tooltip, setTooltip] = useState({ show: false, text: '', x: 0, y: 0 });
 
-  // Config based on requirements
-  const YEAR_SELECTOR_WIDTH = 120; // Slightly adjusted for tight fit
   const H_PADDING = 48; // p-6 on both sides
-  const GAP_PX = 5;
-  const MIN_CELL = 8;
-  const MAX_CELL = 18;
+  const GAP_PX = 4;
+  const MIN_CELL = 9;
+  const MAX_CELL = 16;
   const WEEKS = 53;
 
   useLayoutEffect(() => {
@@ -45,12 +43,11 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
 
   const { cellSizePx, gapPx } = useMemo(() => {
     const isCompactScreen = containerWidth > 0 && containerWidth < 640;
-    const yearSelectorWidth = isCompactScreen ? 0 : YEAR_SELECTOR_WIDTH;
     const horizontalPadding = isCompactScreen ? 0 : H_PADDING;
-    const gapPx = isCompactScreen ? 1 : GAP_PX;
-    const minCell = isCompactScreen ? 4 : MIN_CELL;
-    const maxCell = isCompactScreen ? 10 : MAX_CELL;
-    const available = Math.max(0, containerWidth - yearSelectorWidth - horizontalPadding);
+    const gapPx = isCompactScreen ? 3 : GAP_PX;
+    const minCell = isCompactScreen ? 6 : MIN_CELL;
+    const maxCell = isCompactScreen ? 12 : MAX_CELL;
+    const available = Math.max(0, containerWidth - horizontalPadding);
     const totalGaps = (WEEKS - 1) * gapPx;
     const raw = Math.floor((available - totalGaps) / WEEKS);
     const clamped = Math.max(minCell, Math.min(maxCell, raw || minCell));
@@ -66,11 +63,11 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
     } else {
       endDate = new Date(year, 11, 31);
     }
-    
+
     // Aligned to 365 days ending at endDate
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - 364);
-    
+
     const arr = [];
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
       arr.push(new Date(d));
@@ -87,7 +84,7 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
       const dateStr = d.toISOString().slice(0, 10);
       const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
       const week = Math.floor((i + ((start.getDay() + 6) % 7)) / 7);
-      
+
       cells.push({
         date: dateStr,
         displayDate: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
@@ -99,22 +96,56 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
     return cells;
   }, [dates, data]);
 
+  // Fast lookup for rendering, so we don't .find() per cell.
+  const cellByKey = useMemo(() => {
+    const map = new Map();
+    dayCells.forEach(c => map.set(`${c.week}-${c.row}`, c));
+    return map;
+  }, [dayCells]);
+
   const maxWeek = useMemo(() => {
     if (!dayCells.length) return WEEKS;
     return Math.max(...dayCells.map(c => c.week)) + 1;
   }, [dayCells]);
 
+  // Month labels placed above the column where each month begins.
+  const monthLabels = useMemo(() => {
+    const earliest = new Map();
+    dayCells.forEach(c => {
+      const cur = earliest.get(c.week);
+      if (!cur || c.date < cur) earliest.set(c.week, c.date);
+    });
+    const labels = [];
+    let lastMonth = -1;
+    let lastLabeledWeek = -10;
+    for (let w = 0; w < maxWeek; w++) {
+      const d = earliest.get(w);
+      if (!d) continue;
+      const dateObj = new Date(`${d}T00:00:00`);
+      const month = dateObj.getMonth();
+      if (month !== lastMonth && w - lastLabeledWeek >= 2) {
+        labels.push({ week: w, label: dateObj.toLocaleDateString('en-US', { month: 'short' }) });
+        lastMonth = month;
+        lastLabeledWeek = w;
+      } else if (month !== lastMonth) {
+        lastMonth = month;
+      }
+    }
+    return labels;
+  }, [dayCells, maxWeek]);
+
   const getColorClass = (count) => {
-    if (count === 0) return 'bg-neutral-800 border border-white/5';
-    if (count >= 3) return 'bg-green-500';
-    if (count >= 2) return 'bg-green-600'; 
-    return 'bg-green-700'; 
+    if (count === 0) return 'bg-white/[0.04]';
+    if (count >= 4) return 'bg-emerald-400';
+    if (count === 3) return 'bg-emerald-500';
+    if (count === 2) return 'bg-emerald-600';
+    return 'bg-emerald-800';
   };
 
   const handleMouseEnter = (e, cell) => {
     const rect = e.target.getBoundingClientRect();
     const countText = cell.count === 0 ? 'No submissions' : `${cell.count} submission${cell.count > 1 ? 's' : ''}`;
-    
+
     setTooltip({
       show: true,
       text: `${countText} on ${cell.displayDate}`,
@@ -127,62 +158,73 @@ export default function Heatmap({ data = {}, year = new Date().getFullYear() }) 
     return dayCells.reduce((sum, cell) => sum + cell.count, 0);
   }, [dayCells]);
 
+  const gridColumns = `repeat(${maxWeek}, ${cellSizePx}px)`;
+
   return (
     <div className="w-full" ref={containerRef}>
-      <div className="mb-6 flex justify-between items-start">
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-            </svg>
-            Activity Graph
-          </h2>
-          <p className="text-gray-400 text-sm mt-1">{totalContributions} submission{totalContributions !== 1 ? 's' : ''} in {year}</p>
-        </div>
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <p className="text-sm text-gray-400">
+          <span className="font-semibold text-white tabular-nums">{totalContributions}</span> submission{totalContributions !== 1 ? 's' : ''} in {year}
+        </p>
       </div>
 
       <div className="w-full overflow-x-auto pb-2">
-        <div 
-          className="inline-grid grid-flow-col min-w-max"
-          style={{ 
-            gridTemplateColumns: `repeat(${maxWeek}, ${cellSizePx}px)`,
-            gridTemplateRows: `repeat(7, ${cellSizePx}px)`,
-            gap: `${gapPx}px`
-          }}
-        >
-          {Array.from({ length: maxWeek }).map((_, col) =>
-            Array.from({ length: 7 }).map((__, row) => {
-              const cell = dayCells.find(c => c.week === col && c.row === row);
-              if (!cell) return <div key={`${col}-${row}`} style={{ width: cellSizePx, height: cellSizePx }} />;
-              
-              return (
-                <div
-                  key={`${col}-${row}`}
-                  title={`${cell.count} submissions on ${cell.date}`}
-                  onMouseEnter={(e) => handleMouseEnter(e, cell)}
-                  onMouseLeave={() => setTooltip({ show: false, text: '', x: 0, y: 0 })}
-                  className={`rounded-sm transition-transform hover:scale-110 cursor-pointer ${getColorClass(cell.count)}`}
-                  style={{ width: `${cellSizePx}px`, height: `${cellSizePx}px` }}
-                />
-              );
-            })
-          )}
+        <div className="inline-block min-w-max">
+          {/* Month labels */}
+          <div
+            className="grid mb-1.5 text-[10px] font-medium text-gray-500"
+            style={{ gridTemplateColumns: gridColumns, gap: `${gapPx}px` }}
+          >
+            {monthLabels.map((m) => (
+              <span key={`${m.week}-${m.label}`} style={{ gridColumnStart: m.week + 1 }} className="whitespace-nowrap">
+                {m.label}
+              </span>
+            ))}
+          </div>
+
+          {/* Cells */}
+          <div
+            className="grid grid-flow-col"
+            style={{
+              gridTemplateColumns: gridColumns,
+              gridTemplateRows: `repeat(7, ${cellSizePx}px)`,
+              gap: `${gapPx}px`
+            }}
+          >
+            {Array.from({ length: maxWeek }).map((_, col) =>
+              Array.from({ length: 7 }).map((__, row) => {
+                const cell = cellByKey.get(`${col}-${row}`);
+                if (!cell) return <div key={`${col}-${row}`} style={{ width: cellSizePx, height: cellSizePx }} />;
+
+                return (
+                  <div
+                    key={`${col}-${row}`}
+                    onMouseEnter={(e) => handleMouseEnter(e, cell)}
+                    onMouseLeave={() => setTooltip({ show: false, text: '', x: 0, y: 0 })}
+                    className={`rounded-[3px] transition-all duration-150 hover:ring-2 hover:ring-emerald-300/40 cursor-pointer ${getColorClass(cell.count)}`}
+                    style={{ width: `${cellSizePx}px`, height: `${cellSizePx}px` }}
+                  />
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
       {/* Legend */}
       <div className="flex items-center justify-end gap-1.5 mt-4 text-[10px] font-medium text-gray-500">
         <span>Less</span>
-        <div className="w-[10px] h-[10px] rounded-sm bg-neutral-800" />
-        <div className="w-[10px] h-[10px] rounded-sm bg-green-700" />
-        <div className="w-[10px] h-[10px] rounded-sm bg-green-600" />
-        <div className="w-[10px] h-[10px] rounded-sm bg-green-500" />
+        <div className="w-[11px] h-[11px] rounded-[3px] bg-white/[0.04]" />
+        <div className="w-[11px] h-[11px] rounded-[3px] bg-emerald-800" />
+        <div className="w-[11px] h-[11px] rounded-[3px] bg-emerald-600" />
+        <div className="w-[11px] h-[11px] rounded-[3px] bg-emerald-500" />
+        <div className="w-[11px] h-[11px] rounded-[3px] bg-emerald-400" />
         <span>More</span>
       </div>
 
       {/* Tooltip Overlay */}
       {tooltip.show && (
-        <div 
+        <div
           className="fixed z-50 bg-neutral-900 text-gray-100 text-xs py-2 px-3 rounded-lg shadow-xl shadow-black/50 border border-white/10 backdrop-blur-md pointer-events-none transform -translate-x-1/2 -translate-y-[calc(100%+8px)] font-medium whitespace-nowrap"
           style={{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }}
         >
