@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api';
 import LeetCodeImport from '../components/LeetCodeImport';
 import TopicTags from '../components/TopicTags';
+import TopicFilterTabs from '../components/TopicFilterTabs';
 import { getProblemTopics } from '../utils/problemFilters';
 
 const BULK_ADD_CONCURRENCY = 3;
@@ -119,11 +120,15 @@ export default function Problems() {
     });
 
     if (sortBy === 'recent') {
-      // Most recently solved first; unsolved problems sink to the bottom.
+      // Most recently solved first. If timestamps are unavailable (older data),
+      // fall back to status priority so solved problems still rise to the top.
+      const statusRank = { solved: 2, attempted: 1, unsolved: 0 };
       filtered.sort((a, b) => {
         const aTime = a.solvedAt ? new Date(a.solvedAt).getTime() : 0;
         const bTime = b.solvedAt ? new Date(b.solvedAt).getTime() : 0;
         if (aTime !== bTime) return bTime - aTime;
+        const rankDiff = (statusRank[b.status] ?? 0) - (statusRank[a.status] ?? 0);
+        if (rankDiff !== 0) return rankDiff;
         return getProblemNumber(a) - getProblemNumber(b);
       });
     } else {
@@ -407,23 +412,12 @@ export default function Problems() {
 
 
       {/* Dynamic Pattern Tabs */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <button 
-          onClick={() => setActivePattern('all')}
-          className={`transition-all ${activePattern === 'all' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-        >
-          All
-        </button>
-        {dynamicPatterns.map(p => (
-           <button 
-             key={p}
-             onClick={() => setActivePattern(p)}
-             className={`transition-all ${activePattern === p ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-           >
-             {p}
-           </button>
-        ))}
-      </div>
+      <TopicFilterTabs
+        patterns={dynamicPatterns}
+        activePattern={activePattern}
+        onSelect={setActivePattern}
+        accent="emerald"
+      />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">

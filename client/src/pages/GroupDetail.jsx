@@ -4,6 +4,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import AddFromProblemsetModal from '../components/groups/AddFromProblemsetModal';
 import TopicTags from '../components/TopicTags';
+import TopicFilterTabs from '../components/TopicFilterTabs';
 import { getProblemTopics } from '../utils/problemFilters';
 
 const BULK_GROUP_ADD_CONCURRENCY = 3;
@@ -142,14 +143,19 @@ export default function GroupDetail() {
     });
 
     if (sortBy === 'recent') {
-      // Most recently solved (by me) first; unsolved problems sink to the bottom.
+      // Most recently solved (by me) first. If timestamps are unavailable
+      // (older data), fall back to my status so solved problems rise to the top.
+      const statusRank = { solved: 2, attempted: 1, unsolved: 0 };
+      const mine = (p) => p.member_statuses?.find(ms => ms.user_id === user?.id);
       const mySolvedAt = (p) => {
-        const mine = p.member_statuses?.find(ms => ms.user_id === user?.id);
-        return mine?.solvedAt ? new Date(mine.solvedAt).getTime() : 0;
+        const m = mine(p);
+        return m?.solvedAt ? new Date(m.solvedAt).getTime() : 0;
       };
       filtered.sort((a, b) => {
         const diff = mySolvedAt(b) - mySolvedAt(a);
         if (diff !== 0) return diff;
+        const rankDiff = (statusRank[mine(b)?.status] ?? 0) - (statusRank[mine(a)?.status] ?? 0);
+        if (rankDiff !== 0) return rankDiff;
         return a.leetcode_number - b.leetcode_number;
       });
     } else {
@@ -671,22 +677,13 @@ export default function GroupDetail() {
       </div>
 
       {/* Dynamic Pattern Tabs */}
-      <div className="flex flex-wrap gap-3 mb-4 mt-6">
-        <button 
-          onClick={() => setActivePattern('all')}
-          className={`transition-all ${activePattern === 'all' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-        >
-          All
-        </button>
-        {patterns.map(p => (
-           <button 
-             key={p}
-             onClick={() => setActivePattern(p)}
-             className={`transition-all ${activePattern === p ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl px-4 py-2' : 'bg-white/5 border border-white/10 rounded-xl px-4 py-2 hover:bg-white/10 text-gray-300'}`}
-           >
-             {p}
-           </button>
-        ))}
+      <div className="mt-6">
+        <TopicFilterTabs
+          patterns={patterns}
+          activePattern={activePattern}
+          onSelect={setActivePattern}
+          accent="indigo"
+        />
       </div>
 
       <div className="mb-6 mt-4 flex flex-wrap items-center justify-between gap-3">
