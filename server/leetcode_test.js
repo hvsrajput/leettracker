@@ -1,7 +1,8 @@
-const axios = require('axios');
+import axios from 'axios';
+
 const session = process.argv[2];
 
-async function test() {
+const test = async () => {
   let offset = 0;
   let limit = 20;
   try {
@@ -16,5 +17,6 @@ async function test() {
     console.log("has next:", subResp.data.has_next);
     console.log("dump len:", subResp.data.submissions_dump?.length);
   } catch(e) { console.error(e.response?.status, e.response?.data); }
-}
+};
+
 test();

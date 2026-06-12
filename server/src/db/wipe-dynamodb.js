@@ -1,12 +1,12 @@
-require('dotenv').config();
-const { scanItems, deleteItem, TABLE_NAME } = require('./dynamodb');
+import 'dotenv/config';
+import { scanItems, deleteItem, TABLE_NAME } from './dynamodb.js';
 
-async function wipe() {
+const wipe = async () => {
   console.log(`🗑️ Wiping table: ${TABLE_NAME}`);
   try {
     const items = await scanItems();
     console.log(`Found ${items.length} items to delete...`);
-    
+
     let count = 0;
     for (const item of items) {
       await deleteItem(item.PK, item.SK);
@@ -17,6 +17,6 @@ async function wipe() {
   } catch (err) {
     console.error('❌ Wipe failed:', err);
   }
-}
+};
 
 wipe();

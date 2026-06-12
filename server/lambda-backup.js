@@ -1,15 +1,15 @@
 /**
  * Scheduled backup Lambda handler.
  * Triggered by Amazon EventBridge (CloudWatch Events) daily.
- * 
+ *
  * This is a SEPARATE Lambda function from the API handler.
  * It only runs the backup — no Express, no API Gateway.
  */
 
-require('dotenv').config();
-const { backupToS3 } = require('./backup');
+import 'dotenv/config';
+import { backupToS3 } from './src/backup.js';
 
-module.exports.handler = async (event) => {
+export const handler = async (event) => {
   console.log('🔄 Starting scheduled backup...', JSON.stringify(event));
 
   try {

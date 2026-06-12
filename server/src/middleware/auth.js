@@ -1,8 +1,13 @@
-const jwt = require('jsonwebtoken');
+import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET;
+export const JWT_SECRET = process.env.JWT_SECRET;
 
-function auth(req, res, next) {
+/**
+ * @name authMiddleware
+ * @description Verify the Bearer JWT and attach userId/username to the request
+ * @access Public
+ */
+export const auth = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
@@ -17,6 +22,4 @@ function auth(req, res, next) {
   } catch (err) {
     return res.status(401).json({ error: 'Invalid token' });
   }
-}
-
-module.exports = { auth, JWT_SECRET };
+};

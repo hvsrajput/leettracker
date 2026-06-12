@@ -2,11 +2,12 @@
   "name": "leetcode-tracker-server",
   "version": "2.0.0",
   "description": "Backend for LeetCode Tracker (AWS Serverless)",
-  "main": "index.js",
+  "type": "module",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js",
-    "seed": "node db/seed-dynamodb.js",
-    "package": "zip -r lambda-deploy.zip index.js lambda.js lambda-backup.js backup.js package.json package-lock.json node_modules/ routes/ middleware/ db/dynamodb.js db/seed-dynamodb.js utils/ data/ .env"
+    "start": "node src/index.js",
+    "seed": "node src/db/seed-dynamodb.js",
+    "package": "zip -r lambda-deploy.zip lambda.js lambda-backup.js package.json package-lock.json node_modules/ src/ .env"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

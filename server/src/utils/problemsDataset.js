@@ -1,13 +1,22 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 let problemsDataset;
 let datasetMapByNumber;
 let datasetMapBySlug;
 
-function ensureLoaded() {
+// Lazily load the problems dataset on first access
+const ensureLoaded = () => {
   if (problemsDataset) {
     return;
   }
 
-  problemsDataset = require('../data/problems.json');
+  problemsDataset = JSON.parse(
+    readFileSync(path.join(__dirname, '../data/problems.json'), 'utf8')
+  );
   datasetMapByNumber = new Map();
   datasetMapBySlug = new Map();
 
@@ -15,25 +24,19 @@ function ensureLoaded() {
     datasetMapByNumber.set(problem.number, problem);
     datasetMapBySlug.set(problem.slug, problem);
   });
-}
+};
 
-function getProblemsDataset() {
+export const getProblemsDataset = () => {
   ensureLoaded();
   return problemsDataset;
-}
+};
 
-function getProblemByNumber(number) {
+export const getProblemByNumber = (number) => {
   ensureLoaded();
   return datasetMapByNumber.get(Number(number));
-}
+};
 
-function getProblemBySlug(slug) {
+export const getProblemBySlug = (slug) => {
   ensureLoaded();
   return datasetMapBySlug.get(slug);
-}
-
-module.exports = {
-  getProblemsDataset,
-  getProblemByNumber,
-  getProblemBySlug,
 };

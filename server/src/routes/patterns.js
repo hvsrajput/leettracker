@@ -1,61 +1,21 @@
-const express = require('express');
-const { auth } = require('../middleware/auth');
-const { putItem, queryItems } = require('../db/dynamodb');
+import express from 'express';
+import { auth } from '../middleware/auth.js';
+import { getPatterns, addPattern } from '../controllers/patternsController.js';
 
 const router = express.Router();
 
-module.exports = function () {
-  // Get all patterns
-  router.get('/', auth, async (req, res) => {
-    try {
-      const patterns = await queryItems('PATTERN', 'PAT#');
-      // Sort: defaults first, then alphabetical
-      patterns.sort((a, b) => {
-        if (a.isDefault !== b.isDefault) return b.isDefault - a.isDefault;
-        return a.name.localeCompare(b.name);
-      });
-      res.json(patterns.map(p => ({
-        id: p.name, // Use name as ID (unique)
-        name: p.name,
-        is_default: p.isDefault,
-        created_by: p.createdBy,
-      })));
-    } catch (err) {
-      console.error('Get patterns error:', err);
-      res.status(500).json({ error: 'Failed to get patterns' });
-    }
-  });
+/**
+ * @route GET /api/patterns
+ * @description Get all patterns
+ * @access Private
+ */
+router.get('/', auth, getPatterns);
 
-  // Add custom pattern
-  router.post('/', auth, async (req, res) => {
-    try {
-      const { name } = req.body;
-      if (!name || !name.trim()) {
-        return res.status(400).json({ error: 'Pattern name is required' });
-      }
+/**
+ * @route POST /api/patterns
+ * @description Add a custom pattern
+ * @access Private
+ */
+router.post('/', auth, addPattern);
 
-      const trimmed = name.trim();
-
-      // Check if exists
-      const existing = await queryItems('PATTERN', `PAT#${trimmed}`);
-      if (existing.length > 0) {
-        return res.status(400).json({ error: 'Pattern already exists' });
-      }
-
-      await putItem({
-        PK: 'PATTERN',
-        SK: `PAT#${trimmed}`,
-        name: trimmed,
-        isDefault: 0,
-        createdBy: req.userId,
-      });
-
-      res.json({ id: trimmed, name: trimmed, is_default: 0 });
-    } catch (err) {
-      console.error('Add pattern error:', err);
-      res.status(500).json({ error: 'Failed to add pattern' });
-    }
-  });
-
-  return router;
-};
+export default router;

@@ -1,20 +1,20 @@
-const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand, BatchWriteCommand, BatchGetCommand } = require('@aws-sdk/lib-dynamodb');
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, DeleteCommand, UpdateCommand, ScanCommand, BatchWriteCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 
 // Initialize DynamoDB client
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION || 'ap-south-1',
 });
 
-const docClient = DynamoDBDocumentClient.from(client, {
+export const docClient = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true },
 });
 
-const TABLE_NAME = process.env.DYNAMODB_TABLE || 'LeetTrackerTable';
+export const TABLE_NAME = process.env.DYNAMODB_TABLE || 'LeetTrackerTable';
 
 // --- Helper functions ---
 
-async function putItem(item, conditionExpression, expressionValues) {
+export const putItem = async (item, conditionExpression, expressionValues) => {
   const params = {
     TableName: TABLE_NAME,
     Item: item,
@@ -26,17 +26,17 @@ async function putItem(item, conditionExpression, expressionValues) {
     }
   }
   return docClient.send(new PutCommand(params));
-}
+};
 
-async function getItem(pk, sk) {
+export const getItem = async (pk, sk) => {
   const result = await docClient.send(new GetCommand({
     TableName: TABLE_NAME,
     Key: { PK: pk, SK: sk },
   }));
   return result.Item || null;
-}
+};
 
-async function queryItems(pk, skPrefix, options = {}) {
+export const queryItems = async (pk, skPrefix, options = {}) => {
   const params = {
     TableName: TABLE_NAME,
     KeyConditionExpression: 'PK = :pk',
@@ -67,16 +67,16 @@ async function queryItems(pk, skPrefix, options = {}) {
 
   const result = await docClient.send(new QueryCommand(params));
   return result.Items || [];
-}
+};
 
-async function deleteItem(pk, sk) {
+export const deleteItem = async (pk, sk) => {
   return docClient.send(new DeleteCommand({
     TableName: TABLE_NAME,
     Key: { PK: pk, SK: sk },
   }));
-}
+};
 
-async function updateItem(pk, sk, updateExpression, expressionValues, expressionNames) {
+export const updateItem = async (pk, sk, updateExpression, expressionValues, expressionNames) => {
   const params = {
     TableName: TABLE_NAME,
     Key: { PK: pk, SK: sk },
@@ -89,9 +89,9 @@ async function updateItem(pk, sk, updateExpression, expressionValues, expression
   }
   const result = await docClient.send(new UpdateCommand(params));
   return result.Attributes;
-}
+};
 
-async function scanItems(filterExpression, expressionValues, expressionNames) {
+export const scanItems = async (filterExpression, expressionValues, expressionNames) => {
   const params = {
     TableName: TABLE_NAME,
   };
@@ -114,9 +114,9 @@ async function scanItems(filterExpression, expressionValues, expressionNames) {
   } while (lastKey);
 
   return items;
-}
+};
 
-async function batchWrite(items) {
+export const batchWrite = async (items) => {
   // DynamoDB batch write supports max 25 items per call
   const chunks = [];
   for (let i = 0; i < items.length; i += 25) {
@@ -132,9 +132,9 @@ async function batchWrite(items) {
       },
     }));
   }
-}
+};
 
-async function batchGetItems(keys) {
+export const batchGetItems = async (keys) => {
   if (!keys || keys.length === 0) {
     return [];
   }
@@ -164,17 +164,4 @@ async function batchGetItems(keys) {
   }
 
   return items;
-}
-
-module.exports = {
-  docClient,
-  TABLE_NAME,
-  putItem,
-  getItem,
-  queryItems,
-  deleteItem,
-  updateItem,
-  scanItems,
-  batchWrite,
-  batchGetItems,
 };

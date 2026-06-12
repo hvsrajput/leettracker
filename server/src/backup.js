@@ -5,16 +5,16 @@
  *   2. Manual /api/backup endpoint
  */
 
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { scanItems } = require('./db/dynamodb');
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { scanItems } from './db/dynamodb.js';
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION || 'ap-south-1',
 });
 
-const BUCKET_NAME = process.env.S3_BACKUP_BUCKET || 'leettracker-backups';
+export const BUCKET_NAME = process.env.S3_BACKUP_BUCKET || 'leettracker-backups';
 
-async function backupToS3() {
+export const backupToS3 = async () => {
   // Scan all items from DynamoDB
   const allItems = await scanItems();
 
@@ -39,6 +39,4 @@ async function backupToS3() {
 
   console.log(`✅ Backup saved to s3://${BUCKET_NAME}/${key} (${allItems.length} items)`);
   return { bucket: BUCKET_NAME, key, itemCount: allItems.length };
-}
-
-module.exports = { backupToS3, BUCKET_NAME };
+};
