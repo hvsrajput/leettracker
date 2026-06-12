@@ -7,7 +7,7 @@ import problemsRoutes from './routes/problems.js';
 import groupsRoutes from './routes/groups.js';
 import dashboardRoutes from './routes/dashboard.js';
 import leetcodeRoutes from './routes/leetcode.js';
-import auth from './middleware/auth.js'
+import { auth } from './middleware/auth.js'
 import { healthCheck, runBackup } from './controllers/systemController.js';
 
 const app = express();
