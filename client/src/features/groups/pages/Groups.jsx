@@ -1,67 +1,18 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, BookOpen, ChevronRight } from 'lucide-react';
-import { listGroups, createGroup } from '@/features/groups/services/groupsApi';
+import { Plus, Users } from 'lucide-react';
+import { useGroups } from '@/features/groups/hooks/useGroups';
 import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
-import { Label } from '@/shared/ui/label';
 import { Card } from '@/shared/ui/card';
-import { Badge } from '@/shared/ui/badge';
-import { Progress } from '@/shared/ui/progress';
-import { Skeleton } from '@/shared/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/shared/ui/dialog';
-import { toast } from '@/shared/ui/use-toast';
+import GroupsSkeleton from '@/features/groups/components/GroupsSkeleton';
+import GroupCard from '@/features/groups/components/GroupCard';
+import CreateGroupDialog from '@/features/groups/components/CreateGroupDialog';
 
 const Groups = () => {
   const navigate = useNavigate();
-  const [groups, setGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [error, setError] = useState('');
+  const groups = useGroups();
 
-  useEffect(() => {
-    listGroups()
-      .then(res => setGroups(res.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleCreate = async () => {
-    if (!groupName.trim()) return;
-    setError('');
-    try {
-      const res = await createGroup(groupName.trim());
-      setGroups(prev => [{ ...res.data, creator_name: 'You' }, ...prev]);
-      toast({ title: 'Group created', description: groupName.trim(), variant: 'success' });
-      setGroupName('');
-      setShowCreate(false);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create group');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-        <div className="space-y-3">
-          <Skeleton className="h-9 w-48" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-64 rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
+  if (groups.loading) {
+    return <GroupsSkeleton />;
   }
 
   return (
@@ -71,123 +22,40 @@ const Groups = () => {
           <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Groups</h1>
           <p className="text-muted-foreground mt-2">Collaborate and track progress together</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
+        <Button onClick={groups.openCreate}>
           <Plus className="h-4 w-4" />
           Create Group
         </Button>
       </header>
 
-      {groups.length === 0 ? (
+      {groups.groups.length === 0 ? (
         <Card className="p-16 flex flex-col items-center justify-center text-center animate-rise">
           <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-5">
             <Users className="w-7 h-7" />
           </div>
           <h3 className="text-xl font-semibold text-white mb-2">No groups yet</h3>
           <p className="text-muted-foreground mb-6 max-w-sm">Create a group and invite others to track coding progress together.</p>
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={groups.openCreate}>
             <Plus className="h-4 w-4" />
             Create New Group
           </Button>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
-          {groups.map((g, idx) => {
-            const total = g.problem_count || 0;
-            const solved = g.solved_count || 0;
-            const percent = total > 0 ? Math.round((solved / total) * 100) : 0;
-            return (
-              <Card
-                role="button"
-                tabIndex={0}
-                className="text-left p-6 cursor-pointer transition-all duration-300 hover:bg-white/[0.04] hover:-translate-y-0.5 hover:border-emerald-500/20 group animate-rise"
-                style={{ animationDelay: `${Math.min(idx, 8) * 50}ms` }}
-                key={g.id}
-                onClick={() => navigate(`/groups/${g.id}`)}
-                onKeyDown={(e) => e.key === 'Enter' && navigate(`/groups/${g.id}`)}
-              >
-                <div className="flex justify-between items-start mb-5">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-bold text-white group-hover:text-emerald-400 transition-colors truncate">{g.name}</h3>
-                    <span className="text-sm text-muted-foreground flex items-center gap-1.5 mt-1.5">
-                      <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-gray-200 font-semibold">
-                        {g.creator_name.charAt(0).toUpperCase()}
-                      </span>
-                      by <span className="font-medium text-gray-400">{g.creator_name}</span>
-                    </span>
-                  </div>
-                  <span className="p-2 rounded-lg bg-white/5 text-muted-foreground group-hover:bg-emerald-500/15 group-hover:text-emerald-400 transition-colors flex-shrink-0">
-                    <ChevronRight className="w-5 h-5" />
-                  </span>
-                </div>
-
-                {/* Completion bar */}
-                <div className="flex items-center gap-3 mb-5">
-                  <Progress className="flex-1" value={percent} />
-                  <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">{percent}%</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 border-t border-white/[0.07] pt-4">
-                  <div className="flex flex-col">
-                    <span className="flex items-center gap-1.5 text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">
-                      <Users className="w-3.5 h-3.5" />
-                      Members
-                    </span>
-                    <span className="text-2xl font-bold text-white tabular-nums">{g.member_count}</span>
-                  </div>
-                  <div className="flex flex-col border-l border-white/[0.07] pl-4">
-                    <span className="flex items-center gap-1.5 text-muted-foreground text-xs uppercase tracking-wider font-semibold mb-1">
-                      <BookOpen className="w-3.5 h-3.5" />
-                      Problems
-                    </span>
-                    <span className="text-2xl font-bold text-white tabular-nums">{g.problem_count}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/[0.07] pt-4">
-                  <Badge variant="success">{g.solved_count || 0} solved</Badge>
-                  <Badge variant="warning">{g.attempted_count || 0} attempted</Badge>
-                  <Badge variant="secondary">{g.unsolved_count || 0} unsolved</Badge>
-                </div>
-              </Card>
-            );
-          })}
+          {groups.groups.map((g, idx) => (
+            <GroupCard key={g.id} group={g} index={idx} onOpen={() => navigate(`/groups/${g.id}`)} />
+          ))}
         </div>
       )}
 
-      {/* Create Group Dialog */}
-      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) { setShowCreate(false); setError(''); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Create New Group</DialogTitle>
-            <DialogDescription>Invite friends and track problems together.</DialogDescription>
-          </DialogHeader>
-
-          {error && (
-            <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">{error}</div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="group-name">Group Name</Label>
-            <Input
-              id="group-name"
-              type="text"
-              value={groupName}
-              onChange={e => setGroupName(e.target.value)}
-              placeholder="e.g. Blind 75 Squad"
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
-              autoFocus
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => { setShowCreate(false); setError(''); }}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!groupName.trim()}>
-              <Plus className="h-4 w-4" />
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateGroupDialog
+        open={groups.showCreate}
+        onClose={groups.closeCreate}
+        groupName={groups.groupName}
+        setGroupName={groups.setGroupName}
+        error={groups.error}
+        onCreate={groups.handleCreate}
+      />
     </div>
   );
 };

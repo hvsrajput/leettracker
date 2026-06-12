@@ -5,7 +5,7 @@ import TopicFilterTabs from '@/shared/components/TopicFilterTabs';
 import { Button } from '@/shared/ui/button';
 import ProblemFilters from '@/features/problems/components/ProblemFilters';
 import ProblemList from '@/features/problems/components/ProblemList';
-import AddProblemDialog from '@/features/problems/components/AddProblemDialog';
+import AddProblemDialog from '@/shared/components/AddProblemDialog';
 import DeleteProblemDialog from '@/features/problems/components/DeleteProblemDialog';
 import ImportProblemsDialog from '@/features/problems/components/ImportProblemsDialog';
 

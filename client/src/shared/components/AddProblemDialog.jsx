@@ -4,6 +4,7 @@ import {
   BulkParseStats,
   AddModeToggle,
 } from '@/shared/components/StatusControls';
+import { cn } from '@/shared/lib/utils';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Textarea } from '@/shared/ui/textarea';
@@ -19,9 +20,11 @@ import {
   DialogFooter,
 } from '@/shared/ui/dialog';
 
-// "Add Problem" dialog. Receives the entire useAddProblem return as props and
-// only renders — search/preview/single/bulk behaviour all lives in the hook.
+// Presentational "Add Problem" dialog shared by the Problems page and a group.
+// Receives the entire useAddProblemFlow return as props plus a few labels;
+// all single/bulk behaviour lives in the hook.
 const AddProblemDialog = ({
+  // useAddProblemFlow return
   showAddModal,
   closeAddModal,
   addMode,
@@ -43,12 +46,18 @@ const AddProblemDialog = ({
   bulkParseResult,
   bulkCompletionPercent,
   handleBulkAddProblems,
+  // presentation
+  accent = 'emerald',
+  title = 'Add Problem',
+  description = 'Track a new LeetCode problem in your list.',
+  submitLabel = 'Save',
+  skippedLabel = 'Tracked',
 }) => (
   <Dialog open={showAddModal} onOpenChange={(open) => { if (!open) closeAddModal(); }}>
     <DialogContent className="max-w-lg p-0 gap-0">
       <DialogHeader className="px-6 py-5 border-b border-white/[0.08]">
-        <DialogTitle>Add Problem</DialogTitle>
-        <DialogDescription>Track a new LeetCode problem in your list.</DialogDescription>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
 
       <div className="px-6 py-5 space-y-4">
@@ -73,7 +82,10 @@ const AddProblemDialog = ({
                   autoComplete="off"
                 />
                 {isSearching && (
-                  <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-emerald-400" />
+                  <Loader2 className={cn(
+                    'absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin',
+                    accent === 'indigo' ? 'text-indigo-400' : 'text-emerald-400'
+                  )} />
                 )}
               </div>
 
@@ -141,6 +153,8 @@ const AddProblemDialog = ({
               bulkResults={bulkResults}
               isBulkAdding={isBulkAdding}
               bulkCompletionPercent={bulkCompletionPercent}
+              accent={accent}
+              skippedLabel={skippedLabel}
             />
           </>
         )}
@@ -153,7 +167,7 @@ const AddProblemDialog = ({
         {addMode === 'single' ? (
           <Button onClick={handleAddProblem} disabled={!preview}>
             <Plus className="h-4 w-4" />
-            Save
+            {submitLabel}
           </Button>
         ) : (
           <Button

@@ -77,10 +77,14 @@ export const useProblems = () => {
     return filtered;
   }, [allProblems, activePattern, difficultyFilter, solvedFilter, sortBy]);
 
-  // Reset pagination whenever the filtered/sorted result set changes.
-  useEffect(() => {
+  // Reset pagination whenever the filter/sort selection changes. Done during
+  // render (not in an effect) so it collapses into the same render pass.
+  const filterKey = `${activePattern}|${difficultyFilter}|${solvedFilter}|${sortBy}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
     setVisibleCount(PROBLEMS_PAGE_SIZE);
-  }, [activePattern, difficultyFilter, solvedFilter, sortBy]);
+  }
 
   const visibleProblems = useMemo(
     () => problems.slice(0, visibleCount),
