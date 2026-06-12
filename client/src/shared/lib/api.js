@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  // Send the HttpOnly session cookie with every request (cross-site, so the
+  // server must respond with a specific origin + Access-Control-Allow-Credentials).
+  withCredentials: true,
 });
 
 const responseCache = new Map();
@@ -9,9 +12,17 @@ const inflightGets = new Map();
 const DEFAULT_CACHE_TTL = 15000;
 
 const buildCacheKey = (url, config = {}) => {
-  const token = localStorage.getItem('token') || '';
+  // Scope cached reads to the signed-in user so switching accounts can't surface
+  // another user's cached response. The token now lives in an HttpOnly cookie
+  // (unreadable here), so we key on the stored user id instead.
+  let userId = '';
+  try {
+    userId = JSON.parse(localStorage.getItem('user') || '{}')?.id || '';
+  } catch {
+    userId = '';
+  }
   const params = config.params ? JSON.stringify(config.params) : '';
-  return `${token}::${url}::${params}`;
+  return `${userId}::${url}::${params}`;
 };
 
 const invalidateCache = (prefix = '') => {
@@ -22,14 +33,8 @@ const invalidateCache = (prefix = '') => {
   }
 };
 
-// Add JWT token to every request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// The session JWT is carried automatically by the HttpOnly cookie
+// (withCredentials above), so there's no Authorization header to attach here.
 
 // Handle 401 responses and clear cached reads after mutations.
 api.interceptors.response.use(
@@ -42,9 +47,11 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
+      // Cookie expired or missing — drop the cached user and bounce to login.
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

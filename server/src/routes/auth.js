@@ -1,6 +1,6 @@
 import express from 'express';
 import { auth } from '../middleware/auth.js';
-import { register, login, getMe, updateLeetcodeUsername } from '../controllers/authController.js';
+import { register, login, logout, getMe, updateLeetcodeUsername } from '../controllers/authController.js';
 
 const router = express.Router();
 
@@ -17,6 +17,13 @@ router.post('/register', register);
  * @access Public
  */
 router.post('/login', login);
+
+/**
+ * @route POST /api/auth/logout
+ * @description Clear the session cookie
+ * @access Public
+ */
+router.post('/logout', logout);
 
 /**
  * @route GET /api/auth/me

@@ -37,3 +37,10 @@ server/lambda-deploy.zip
 
 # Graphify
 graphify-out
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# Readme Files
+DEPLOY.md

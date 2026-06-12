@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../middleware/auth.js';
+import { TOKEN_COOKIE, cookieOptions } from '../middleware/auth.js';
+import { generateToken } from '../utils/generateToken.js';
 import { putItem, getItem, updateItem } from '../db/dynamodb.js';
 
 /**
@@ -48,7 +48,10 @@ export const register = async (req, res) => {
       username,
     });
 
-    const token = jwt.sign({ id: email, username }, JWT_SECRET, { expiresIn: '7d' });
+    // Sets the HttpOnly session cookie (XSS can't read it) and returns the token.
+    // We still echo the token in the body for non-browser API clients (e.g. the
+    // backup curl); the SPA ignores it and relies on the cookie.
+    const token = generateToken(res, { id: email, username });
     res.json({ token, user: { id: email, username, email } });
   } catch (err) {
     console.error('Register error:', err);
@@ -73,12 +76,24 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ id: email, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = generateToken(res, { id: email, username: user.username });
     res.json({ token, user: { id: email, username: user.username, email: user.email, leetcodeUsername: user.leetcodeUsername } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
   }
+};
+
+/**
+ * @name logoutUserController
+ * @description Clear the session cookie
+ * @access Public
+ */
+export const logout = (req, res) => {
+  // Clear with the same attributes the cookie was set with, otherwise some
+  // browsers won't match and remove it.
+  res.clearCookie(TOKEN_COOKIE, { ...cookieOptions, maxAge: undefined });
+  res.json({ success: true });
 };
 
 /**

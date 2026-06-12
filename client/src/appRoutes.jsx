@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import ProtectedRoute from '@/features/auth/components/ProtectedRoute';
 
+const Landing = lazy(() => import('@/features/marketing/pages/Landing'));
 const Login = lazy(() => import('@/features/auth/pages/Login'));
 const Register = lazy(() => import('@/features/auth/pages/Register'));
 const Profile = lazy(() => import('@/features/auth/pages/Profile'));
@@ -21,6 +22,7 @@ const PageFallback = () => (
 const AppRoutes = () => (
   <Suspense fallback={<PageFallback />}>
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/dashboard" element={
@@ -38,8 +40,7 @@ const AppRoutes = () => (
       <Route path="/profile" element={
         <ProtectedRoute><Profile /></ProtectedRoute>
       } />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   </Suspense>
 );

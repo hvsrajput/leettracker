@@ -13,7 +13,7 @@ export const healthCheck = (req, res) => {
 /**
  * @name runBackupController
  * @description Back up all data to S3 and return it as downloadable JSON
- * @access Public
+ * @access Private — mounted behind the `auth` middleware in app.js
  */
 export const runBackup = async (req, res) => {
   try {

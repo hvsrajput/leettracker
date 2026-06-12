@@ -120,6 +120,8 @@ This creates `lambda-deploy.zip`.
    - `JWT_SECRET` = `your-strong-secret-key-here`
    - `DYNAMODB_TABLE` = `LeetTrackerTable`
    - `S3_BACKUP_BUCKET` = `leettracker-backups-hvsrajput` (your bucket name)
+   - `CLIENT_ORIGIN` = `https://your-app.vercel.app` (your exact frontend URL, for credentialed CORS)
+   - `NODE_ENV` = `production` (so the session cookie gets `Secure` + `SameSite=None`)
 3. Click **Save**
 
 ### 4f. Set Timeout & Memory
@@ -167,15 +169,24 @@ This creates `lambda-deploy.zip`.
 1. Keep **Stage name**: `$default` (auto-deploy)
 2. Click **Next** → **Create**
 
-### 5d. Enable CORS
+### 5d. CORS (handled by the app)
 
-1. In the API, go to **CORS**
-2. Click **Configure**
-3. Settings:
-   - **Access-Control-Allow-Origin**: `*` (or your Vercel domain)
-   - **Access-Control-Allow-Headers**: `Content-Type, Authorization`
+The session is now an **HttpOnly cookie**, so requests are credentialed.
+Credentialed CORS forbids the `*` wildcard — the server must echo your exact
+frontend origin and send `Access-Control-Allow-Credentials: true`. The Express
+app already does this from the `CLIENT_ORIGIN` env var (see 4e), so **leave API
+Gateway's own CORS unconfigured** and let the app respond.
+
+If you do configure CORS at the API Gateway layer, it must match — never `*`:
+   - **Access-Control-Allow-Origin**: `https://your-app.vercel.app` (exact, no wildcard)
+   - **Access-Control-Allow-Credentials**: `true`
+   - **Access-Control-Allow-Headers**: `Content-Type`
    - **Access-Control-Allow-Methods**: `GET, POST, PUT, DELETE, OPTIONS`
-4. Click **Save**
+
+> Cross-site note: frontend (Vercel) and API (API Gateway) sit on different
+> domains, so the cookie is set with `SameSite=None; Secure`. Both are served
+> over HTTPS in production, which satisfies `Secure`. Run the server with
+> `NODE_ENV=production` so these attributes are actually applied.
 
 ### 5e. Note Your API URL
 
