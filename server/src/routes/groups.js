@@ -106,11 +106,11 @@ router.post('/:id/problems/bulk', auth, bulkAddProblemsToGroup);
 router.post('/:id/problems', auth, addProblemToGroup);
 
 /**
- * @route PATCH /api/groups/:id
+ * @route PUT /api/groups/:id
  * @description Rename a group (creator only)
  * @access Private
  */
-router.patch('/:id', auth, updateGroup);
+router.put('/:id', auth, updateGroup);
 
 /**
  * @route DELETE /api/groups/:id

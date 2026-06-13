@@ -7,7 +7,7 @@ export const getGroup = (groupId) => api.getCached(`/groups/${groupId}`, {}, 100
 export const createGroup = (name) => api.post('/groups', { name });
 
 export const updateGroupName = (groupId, name) =>
-  api.patch(`/groups/${groupId}`, { name });
+  api.put(`/groups/${groupId}`, { name });
 
 export const deleteGroup = (groupId, name) =>
   api.delete(`/groups/${groupId}`, { data: { name } });
