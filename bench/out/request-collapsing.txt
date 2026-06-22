@@ -1,0 +1,11 @@
+=== Request collapsing + TTL cache benchmark ===
+v22.22.2 | 2026-06-22T22:09:22.365Z
+
+--- BEFORE: 20 concurrent api.get('/widgets') (no dedup) ---
+server hits: 20
+
+--- AFTER: 20 concurrent api.getCached('/things') ---
+server hits: 1   (20 callers -> 1 request)
+repeat x2 within 15s TTL -> server hits: 0 (served from cache)
+
+=> 20 concurrent reads: 20 -> 1 network call; cached re-reads: 0 calls

@@ -1,0 +1,16 @@
+=== Batched DynamoDB reads benchmark ===
+v22.22.2 | 2026-06-22T22:09:23.201Z
+
+--- BEFORE: 250 problems fetched one-by-one (getItem) ---
+GetItem round-trips: 250
+
+--- AFTER: getManyByNumbers(250) -> batchGetItems ---
+BatchGetItem round-trips: 3  (ceil(250/100) = 3)
+items returned: 250
+
+--- UnprocessedKeys retry loop ---
+injected throttled chunks: 1
+BatchGetItem calls for 100 keys with 1 throttle: 2 (1 base + 1 retry)
+items returned: 100
+
+=> 250 problem reads: 250 GetItem round-trips -> 3 BatchGetItem round-trips

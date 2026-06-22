@@ -1,0 +1,13 @@
+=== Dataset lazy-load + O(1) index benchmark ===
+v22.22.2 | 2026-06-22T22:05:39.674Z
+dataset: 3865 problems | file: 1.14 MB
+
+--- Lazy load (parse once per Lambda container) ---
+cold  first load (read + JSON.parse + build 2 Maps): 14.48 ms
+warm  later access (cached guard):                   0.0009 ms
+=> first request pays 14 ms once; every later lookup skips it
+
+--- Lookup: 20000 random slugs over 3865 problems ---
+BEFORE  O(n) Array.find linear scan: 485.66 ms total | 24.28 us/lookup
+AFTER   O(1) Map.get (real index):   3.18 ms total | 0.16 us/lookup
+=> 153x faster, and flat as the dataset grows
